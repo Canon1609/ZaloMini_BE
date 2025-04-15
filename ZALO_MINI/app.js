@@ -5,7 +5,6 @@ const app = express();
 
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
-const chatRoutes = require('./routes/chat.routes');
 
 const corsOptions = {
   origin: [
@@ -26,7 +25,6 @@ app.use(express.urlencoded({ extended: true }));
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
-app.use('/api/chat', chatRoutes);
 
 // View Engine for Email Template
 app.set('view engine', 'ejs');
