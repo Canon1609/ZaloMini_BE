@@ -26,7 +26,7 @@ const {
         createdAt
       };
   
-      console.log('✅ newUser object:', newUser);
+      console.log('newUser object:', newUser);
   
       const params = {
         TableName: TABLE_NAME,
@@ -83,6 +83,8 @@ const {
       await ddbDocClient.send(new UpdateCommand(params));
     }
   };
+
+  //
   
   module.exports = User;
   
