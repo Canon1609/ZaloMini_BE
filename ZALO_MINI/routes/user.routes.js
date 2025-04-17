@@ -7,5 +7,7 @@ const upload = require('../middleware/upload.middleware');
 router.get('/profile', protect, userController.getProfile);
 router.post('/update-password', protect, userController.updatePassword);
 router.put('/update-avatar', protect, upload.single('avatar'), userController.updateAvatar);
+router.get('/search', protect, userController.searchByEmail);
+
 
 module.exports = router;
