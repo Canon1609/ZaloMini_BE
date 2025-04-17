@@ -65,12 +65,122 @@ Reset mật khẩu	POST	http://localhost:5000/api/auth/reset-password		Đổi m�
 -------------------------------------------------------------------------------------------------------------------------------
 Example table dynamoDB (user), create index (email)
 {
- "userId": "284b5157-61c1-447d-8312-8a8d9c9d71d6",
- "avatarUrl": "https://up-load-file-tranquocanh.s3.amazonaws.com/default-avatar.png",
- "createdAt": "2025-04-09T03:57:20.570Z",
- "email": "plr95697@bcooq.com",
+ "userId": "a466a167-ee38-4b21-b9d1-eb9fb1cdffad",
+ "avatarUrl": "https://up-load-file-tranquocanh.s3.ap-southeast-2.amazonaws.com/avatars/076a6339-53d1-4682-986d-54520c63185c.jpg",
+ "createdAt": "2025-04-09T06:18:25.497Z",
+ "email": "ldj05587@jioso.com",
  "isVerified": true,
- "passwordHash": "$2b$10$KBgjOLXtF1BANAxFo1PmcuKb/UnMsMwlBf6nSZPBKMjvMQiS4.1pq",
- "role": "user"
+ "passwordHash": "$2b$10$/mN8OklB4MnboqxK2fwKduqaxuuwEVJt0AMfvPBAei7IgmgSxl8m.",
+ "role": "user",
+ "username": "Nguyen thi b"
 }
 ------------------------------------------------------------------------------------------------------------------------------
+CHỨC NĂNG TÌM KIẾM THEO EMAIL -> TRẢ VỀ userId
+-----------------------------------------------
+1. login để lấy token ->lưu token ( thêm Bearer Token ở phần Authorization > Bearer Token)
+
+2. GET:         http://localhost:5000/api/user/search?email=test@example.com
+		
+-> userId được trả về
+
+-----------------------------------------------------------------------------------------------------------------------------------
+CHỨC NĂNG THÊM BẠN BÈ
+-------------------------------------------------------------------------------------------------------------------------------
+
+FriendRequests (TABLE)  + Index name: toEmail
+{
+ "requestId": "3153965a-93d7-421f-bea9-30e9d0ddaef2",
+ "createdAt": "2025-04-17T15:43:39.032Z",
+ "fromEmail": "yowopi3931@linxues.com",
+ "status": "declined",
+ "toEmail": "ldj05587@jioso.com"
+}
+
+Friends (TABLE)
+{
+ "friendshipId": "a8a2992f-dc55-4ab4-9877-11d786f6bf2f",
+ "createdAt": "2025-04-17T15:53:58.692Z",
+ "user1Email": "yowopi3931@linxues.com",
+ "user2Email": "ldj05587@jioso.com"
+}
+----------------------------------------------------------------------------------------------------------------------------------
+API			Method		URL							Mô tả
+Gửi lời mời		POST		http://localhost:5000/api/friend/request		Gửi lời mời kết bạn
+1. LOGIN VÀO -> nhận dc token-> lưu token (thêm Bearer Token ở phần Authorization > Bearer Token)
+2. POST		http://localhost:5000/api/friend/request
+{
+  "email": "otheruser@gmail.com"
+}
+=> res
+{
+  "message": "Lời mời đã gửi",
+  "requestId": "<uuid>"
+}
+-----------------------------------------------------------------------------------------------------------------------
+Duyệt lời mời		POST		http://localhost:5000/api/friend/accept			Chấp nhận lời mời
+1.email được gửi lời mời đăng nhập vào ->lưu token (thêm Bearer Token ở phần Authorization > Bearer Token)
+2. POST		http://localhost:5000/api/friend/accept
+{
+  "requestId": "<requestId>"
+}
+=>res
+{
+  "message": "Kết bạn thành công"
+}
+----------------------------------------------------------------------------------------------------------------------
+Từ chối lời mời		POST		http://localhost:5000/api/friend/decline		Từ chối lời mời
+1.email được gửi lời mời đăng nhập vào ->lưu token (thêm Bearer Token ở phần Authorization > Bearer Token)
+2. POST		http://localhost:5000/api/friend/decline
+{
+  "requestId": "<requestId>"
+}
+=>res
+{
+  "message": "Đã từ chối lời mời"
+}
+-----------------------------------------------------------------------------------------------------------------------
+Xóa bạn			DELETE		http://localhost:5000/api/friend/remove			Unfriend 
+1.đăng nhập vào ->lưu token (thêm Bearer Token ở phần Authorization > Bearer Token)
+2. DELETE		http://localhost:5000/api/friend/remove
+{
+  "email": "charlie@example.com"
+}
+=>res
+{
+  "message": "Đã xóa bạn"
+}
+-------------------------------------------------------------------------------------------------------------------------
+Xem danh sách bạn bè 	GET		http://localhost:5000/api/friend/list			Xem danh sách bạn bè 
+1.đăng nhập vào ->lưu token (thêm Bearer Token ở phần Authorization > Bearer Token)
+2. GET		http://localhost:5000/api/friend/list
+=>res
+{
+    "message": "Danh sách bạn bè",
+    "friends": [
+        {
+            "email": "ldj05587@jioso.com",
+            "username": "Nguyen thi",
+            "avatarUrl": "https://up-load-file-tranquocanh.s3.ap-southeast-2.amazonaws.com/avatars/076a6339-53d1-4682-986d-54520c63185c.jpg"
+        }
+    ]
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
