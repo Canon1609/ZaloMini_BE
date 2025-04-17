@@ -37,3 +37,18 @@ exports.updateAvatar = async (req, res) => {
     res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
   }
 };
+
+
+exports.searchByEmail = async (req, res)=> {
+  try {
+    const { email } = req.query;
+
+    const user = await User.getUserByEmail(email);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    res.json({ userId: user.userId });
+  } catch (err) {
+    console.error('searchByEmail error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};

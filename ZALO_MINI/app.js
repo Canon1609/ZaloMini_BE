@@ -26,6 +26,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 
+
+const friendRoutes = require('./routes/friend.routes');
+app.use('/api/friend', friendRoutes);
+
 // View Engine for Email Template
 app.set('view engine', 'ejs');
 app.set('views', './views');
