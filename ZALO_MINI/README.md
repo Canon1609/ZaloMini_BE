@@ -159,7 +159,7 @@ Xem danh sách bạn bè 	GET		http://localhost:5000/api/friend/list			Xem danh 
     "friends": [
         {
             "email": "ldj05587@jioso.com",
-            "username": "Nguyen thi b",
+            "username": "Nguyen thi",
             "avatarUrl": "https://up-load-file-tranquocanh.s3.ap-southeast-2.amazonaws.com/avatars/076a6339-53d1-4682-986d-54520c63185c.jpg"
         }
     ]
