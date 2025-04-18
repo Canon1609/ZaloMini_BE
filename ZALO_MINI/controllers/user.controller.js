@@ -1,6 +1,18 @@
 const User = require('../models/user.model');
 const { uploadToS3 } = require('../utils/s3.util');
 
+
+
+exports.getAllUsers = async (req, res) => {
+  try {
+    const users = await User.getAllUsers();
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+}
+
+
 exports.getProfile = async (req, res) => {
   try {
     const user = await User.getUserById(req.user.userId);
