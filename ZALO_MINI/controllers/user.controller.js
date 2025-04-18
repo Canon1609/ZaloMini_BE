@@ -21,7 +21,19 @@ exports.getProfile = async (req, res) => {
     res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
   }
 };
+exports.getUserById = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    console.log('userId:', userId);
+    
+    const user = await User.getUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Người dùng không tồn tại' });
 
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+};
 exports.updatePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -47,5 +59,19 @@ exports.updateAvatar = async (req, res) => {
     res.json({ message: 'Cập nhật ảnh đại diện thành công', avatarUrl: imageUrl });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+};
+
+
+exports.searchByEmail = async (req, res)=> {
+  try {
+    const { email } = req.params;
+    const user = await User.getUserByEmail(email);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    res.json({ userId: user.userId });
+  } catch (err) {
+    console.error('searchByEmail error:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 };

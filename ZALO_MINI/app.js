@@ -47,7 +47,7 @@ app.set('views', './views');
 app.set('socketio', io);
 // Socket.IO cho chat thời gian thực
 io.on('connection', (socket) => {
-  console.log('Người dùng đã kết nối:', socket.id);
+ 
   // Xác thực token từ client
   if (!socket.handshake.auth || !socket.handshake.auth.token) {
     console.log('Không có token được cung cấp, đang ngắt kết nối:', socket.id);
