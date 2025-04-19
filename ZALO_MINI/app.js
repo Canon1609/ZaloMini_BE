@@ -148,7 +148,7 @@ io.on('connection', (socket) => {
 
       const request = await FriendModel.sendRequest(sender.email, receiver.email);
       console.log('--- EMITTING receiveFriendRequest ---');
-    console.log('receiver.id:', receiver.userId, typeof receiver.userId); // Thêm log này
+    console.log('receiver.userId:', receiver.userId, typeof receiver.userId); // Thêm log này
 
       // Phát sự kiện 'receiveFriendRequest' đến người nhận
       io.to(receiver.userId).emit(`receiveFriendRequest_${receiver.userId}`, {
@@ -183,12 +183,12 @@ io.on('connection', (socket) => {
       const friendItem = await FriendModel.acceptRequest(requestId);
 
       const sender = await User.getUserByEmail(request.fromEmail);
-      io.to(sender.id).emit(`friendRequestAccepted_${sender.id}`, {
-        friend: { id: userId, email: currentEmail, username: (await User.getUserById(userId)).username || '' },
+      io.to(sender.userId).emit(`friendRequestAccepted_${sender.userId}`, {
+        friend: { userId: userId, email: currentEmail, username: (await User.getUserById(userId)).username || '' },
       });
 
       io.to(userId).emit(`friendRequestAccepted_${userId}`, {
-        friend: { id: sender.id, email: request.fromEmail, username: sender.username || '' },
+        friend: { userId: sender.userId, email: request.fromEmail, username: sender.username || '' },
       });
 
       socket.emit('friendRequestAccepted', { message: 'Kết bạn thành công' });
@@ -214,7 +214,7 @@ io.on('connection', (socket) => {
       await FriendModel.declineRequest(requestId);
 
       const sender = await User.getUserByEmail(request.fromEmail);
-      io.to(sender.id).emit(`friendRequestDeclined_${sender.id}`, {
+      io.to(sender.userId).emit(`friendRequestDeclined_${sender.userId}`, {
         receiverId: userId,
         receiverEmail: currentEmail,
       });
@@ -239,7 +239,7 @@ io.on('connection', (socket) => {
 
       await FriendModel.removeFriend(currentEmail, friend.email);
 
-      io.to(friend.id).emit(`friendRemoved_${friend.id}`, {
+      io.to(friend.userId).emit(`friendRemoved_${friend.userId}`, {
         friendId: userId,
         friendEmail: currentEmail,
       });
