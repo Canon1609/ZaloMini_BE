@@ -9,12 +9,13 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS,
   },
 });
+// nhận url từ client sau đó gửi mail theo đường dẫn đó
+const sendVerificationEmail = async (to, token , origin) => {
 
-const sendVerificationEmail = async (to, token) => {
   const html = await ejs.renderFile(
     path.join(__dirname, '../views/verifyEmail.ejs'),
     {
-      verifyLink: `${process.env.CLIENT_URL}/api/auth/verify-email?token=${token}`,
+      verifyLink: `${origin}/api/auth/verify-email?token=${token}`,
     }
   );
 

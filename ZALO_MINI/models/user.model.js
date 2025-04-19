@@ -2,14 +2,43 @@ const {
     PutCommand,
     GetCommand,
     UpdateCommand,
-    QueryCommand
+    QueryCommand,ScanCommand
   } = require('@aws-sdk/lib-dynamodb');
   const { ddbDocClient } = require('../config/aws.config');
   const generateUUID = require('../utils/uuid.util');
+
+ 
   
   const TABLE_NAME = 'user';
   
   const User = {
+
+    async getAllUsers() {
+      const params = {
+        TableName: TABLE_NAME,
+      };
+  
+      const data = await ddbDocClient.send(new ScanCommand(params));
+      if (!data.Items) {
+        console.error('Không có dữ liệu nào trong bảng');
+        return [];
+      }
+    // Ánh xạ dữ liệu (không cần unmarshall vì DynamoDBDocumentClient đã làm việc này)
+    const users = data.Items.map((item) => ({
+      
+      userId: item.userId,
+      email: item.email,
+      avatarUrl: item.avatarUrl,
+      username: item.username,
+      isVerified: item.isVerified,
+      createdAt: item.createdAt,
+    }));
+
+      return users;
+  },
+    
+
+
     async createUser(data) {
       const userId = generateUUID();
       console.log("userId:", userId);

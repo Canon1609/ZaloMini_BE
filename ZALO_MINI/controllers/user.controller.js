@@ -1,6 +1,18 @@
 const User = require('../models/user.model');
 const { uploadToS3 } = require('../utils/s3.util');
 
+
+
+exports.getAllUsers = async (req, res) => {
+  try {
+    const users = await User.getAllUsers();
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+}
+
+
 exports.getProfile = async (req, res) => {
   try {
     const user = await User.getUserById(req.user.userId);
@@ -9,7 +21,19 @@ exports.getProfile = async (req, res) => {
     res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
   }
 };
+exports.getUserById = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    console.log('userId:', userId);
+    
+    const user = await User.getUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Người dùng không tồn tại' });
 
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+};
 exports.updatePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -41,8 +65,7 @@ exports.updateAvatar = async (req, res) => {
 
 exports.searchByEmail = async (req, res)=> {
   try {
-    const { email } = req.query;
-
+    const { email } = req.params;
     const user = await User.getUserByEmail(email);
     if (!user) return res.status(404).json({ message: 'User not found' });
 

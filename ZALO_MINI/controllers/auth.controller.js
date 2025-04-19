@@ -6,6 +6,7 @@ const User = require('../models/user.model');
 // Đăng ký
 exports.register = async (req, res) => {
   try {
+    const origin = req.headers.origin || 'http://localhost:3000'; // Lấy origin từ client, mặc định 3000 nếu không có
     const { email, password, username } = req.body;
 
     // Kiểm tra email đã tồn tại chưa
@@ -24,7 +25,7 @@ exports.register = async (req, res) => {
 
     // Gửi email xác minh
     const token = signToken({ userId: newUser.userId, email });
-    await sendVerificationEmail(email, token);
+    await sendVerificationEmail(email, token , origin);
 
     res.status(201).json({ message: 'Đăng ký thành công. Vui lòng xác minh email.' });
   } catch (err) {
@@ -36,6 +37,7 @@ exports.register = async (req, res) => {
 // Xác minh email
 exports.verifyEmail = async (req, res) => {
   try {
+    
     const { token } = req.query;
     const decoded = verifyToken(token);
 
