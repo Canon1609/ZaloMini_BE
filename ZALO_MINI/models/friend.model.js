@@ -125,21 +125,21 @@ const FriendModel = {
       })
       .promise();
 
-    const friends = await Promise.all(
+    const friendsData = await Promise.all(
       scan.Items.map(async (item) => {
         const friendEmail = item.user1Email === email ? item.user2Email : item.user1Email;
         const user = await User.getUserByEmail(friendEmail);
         return {
+          userId: user?.userId || '', // Thêm userId nếu cần
           email: friendEmail,
           username: user ? user.username || '' : '',
           avatarUrl: user ? user.avatarUrl || '' : ''
-          // Thêm các trường khác nếu cần, ví dụ: avatar
-          // avatar: user ? user.avatar || '' : ''
+          // Thêm các trường khác nếu cần
         };
       })
     );
 
-    return friends;
+    return friendsData; // Đảm bảo trả về một mảng (có thể rỗng, hoặc chứa một hoặc nhiều object)
   },
 };
 

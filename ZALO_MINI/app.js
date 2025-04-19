@@ -10,6 +10,9 @@ const userRoutes = require('./routes/user.routes');
 const chatRoutes = require('./routes/chat.routes');
 const server = http.createServer(app);
 const Message = require('./models/message.model');
+const User = require('./models/user.model'); // Thêm import User
+const FriendModel = require('./models/friend.model');
+const friendRoutes = require('./routes/friend.routes');
 
 // Cấu hình CORS chung cho cả Express và Socket.IO
 const corsOptions = {
@@ -31,6 +34,8 @@ const io = new Server(server, {
     origin: corsOptions.origin, // Đồng bộ với corsOptions
     methods: ['GET', 'POST'],
     credentials: true, // Cho phép gửi token qua auth
+    pingTimeout: 60000, // Tăng timeout lên 60 giây (mặc định là 20 giây)
+    pingInterval: 25000, // Gửi ping mỗi 25 giây (mặc định là 25 giây)
   },
 });
 
@@ -43,11 +48,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 // API cho cuộc trò chuyện
 app.use("/api/chat", chatRoutes);
+//API cho friend
+app.use('/api/friend', friendRoutes);
 app.set('views', './views');
 app.set('socketio', io);
 // Socket.IO cho chat thời gian thực
 io.on('connection', (socket) => {
- 
+
   // Xác thực token từ client
   if (!socket.handshake.auth || !socket.handshake.auth.token) {
     console.log('Không có token được cung cấp, đang ngắt kết nối:', socket.id);
@@ -117,7 +124,136 @@ io.on('connection', (socket) => {
       socket.emit('error', { message: 'Lỗi lưu tin nhắn, vui lòng thử lại' });
     }
   });
-  
+
+    // THÊM MỚI: Gửi lời mời kết bạn
+  socket.on('sendFriendRequest', async (data) => {
+    const { senderId, receiverEmail } = data;
+    try {
+      const sender = await User.getUserById(senderId);
+      const receiver = await User.getUserByEmail(receiverEmail);
+      if (!receiver) {
+        socket.emit('error', { message: 'Không tìm thấy người dùng' });
+        return;
+      }
+      if (receiver.email === sender.email) {
+        socket.emit('error', { message: 'Không thể kết bạn với chính mình' });
+        return;
+      }
+
+      const requests = await FriendModel.getRequests(receiver.email);
+      if (requests.some((req) => req.fromEmail === sender.email)) {
+        socket.emit('error', { message: 'Đã gửi lời mời rồi' });
+        return;
+      }
+
+      const request = await FriendModel.sendRequest(sender.email, receiver.email);
+      console.log('--- EMITTING receiveFriendRequest ---');
+    console.log('receiver.id:', receiver.userId, typeof receiver.userId); // Thêm log này
+
+      // Phát sự kiện 'receiveFriendRequest' đến người nhận
+      io.to(receiver.userId).emit(`receiveFriendRequest_${receiver.userId}`, {
+        requestId: request.requestId,
+        senderId,
+        senderEmail: sender.email,
+        senderUsername: sender.username || '',
+        senderAvatarUrl: sender.avatarUrl || '',
+        createdAt: request.createdAt,
+      });
+
+      socket.emit('friendRequestSent', { message: 'Lời mời đã gửi', requestId: request.requestId });
+    } catch (error) {
+      console.error('Lỗi gửi lời mời kết bạn:', error);
+      socket.emit('error', { message: 'Lỗi gửi lời mời kết bạn' });
+    }
+  });
+
+  // THÊM MỚI: Chấp nhận lời mời kết bạn
+  socket.on('acceptFriendRequest', async (data) => {
+    const { requestId, userId } = data;
+    try {
+      const currentEmail = (await User.getUserById(userId)).email;
+      const request = await FriendModel.getRequests(currentEmail).then((requests) =>
+        requests.find((r) => r.requestId === requestId)
+      );
+      if (!request) {
+        socket.emit('error', { message: 'Không hợp lệ hoặc không có quyền' });
+        return;
+      }
+
+      const friendItem = await FriendModel.acceptRequest(requestId);
+
+      const sender = await User.getUserByEmail(request.fromEmail);
+      io.to(sender.id).emit(`friendRequestAccepted_${sender.id}`, {
+        friend: { id: userId, email: currentEmail, username: (await User.getUserById(userId)).username || '' },
+      });
+
+      io.to(userId).emit(`friendRequestAccepted_${userId}`, {
+        friend: { id: sender.id, email: request.fromEmail, username: sender.username || '' },
+      });
+
+      socket.emit('friendRequestAccepted', { message: 'Kết bạn thành công' });
+    } catch (error) {
+      console.error('Lỗi chấp nhận lời mời:', error);
+      socket.emit('error', { message: 'Lỗi chấp nhận lời mời' });
+    }
+  });
+
+  // THÊM MỚI: Từ chối lời mời kết bạn
+  socket.on('declineFriendRequest', async (data) => {
+    const { requestId, userId } = data;
+    try {
+      const currentEmail = (await User.getUserById(userId)).email;
+      const request = await FriendModel.getRequests(currentEmail).then((requests) =>
+        requests.find((r) => r.requestId === requestId)
+      );
+      if (!request) {
+        socket.emit('error', { message: 'Không hợp lệ hoặc không có quyền' });
+        return;
+      }
+
+      await FriendModel.declineRequest(requestId);
+
+      const sender = await User.getUserByEmail(request.fromEmail);
+      io.to(sender.id).emit(`friendRequestDeclined_${sender.id}`, {
+        receiverId: userId,
+        receiverEmail: currentEmail,
+      });
+
+      socket.emit('friendRequestDeclined', { message: 'Đã từ chối lời mời' });
+    } catch (error) {
+      console.error('Lỗi từ chối lời mời:', error);
+      socket.emit('error', { message: 'Lỗi từ chối lời mời' });
+    }
+  });
+
+  // THÊM MỚI: Xóa bạn bè
+  socket.on('removeFriend', async (data) => {
+    const { userId, friendEmail } = data;
+    try {
+      const currentEmail = (await User.getUserById(userId)).email;
+      const friend = await User.getUserByEmail(friendEmail);
+      if (!friend) {
+        socket.emit('error', { message: 'Không tìm thấy người dùng' });
+        return;
+      }
+
+      await FriendModel.removeFriend(currentEmail, friend.email);
+
+      io.to(friend.id).emit(`friendRemoved_${friend.id}`, {
+        friendId: userId,
+        friendEmail: currentEmail,
+      });
+
+      socket.emit('friendRemoved', { message: 'Đã xóa bạn' });
+    } catch (error) {
+      console.error('Lỗi xóa bạn bè:', error);
+      socket.emit('error', { message: 'Lỗi xóa bạn bè' });
+    }
+  });
+
+
+
+
   socket.on('disconnect', () => {
     console.log('Người dùng ngắt kết nối:', socket.id);
   });

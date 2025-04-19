@@ -115,7 +115,12 @@ Gửi lời mời		POST		http://localhost:5000/api/friend/request		Gửi lời m
 {
   "message": "Lời mời đã gửi",
   "requestId": "<uuid>"
-}
+}-------------------------
+
+GET http://localhost:5000/api/friends/requests/received 
+1. LOGIN VÀO -> nhận dc token-> lưu token (thêm Bearer Token ở phần Authorization > Bearer Token)
+
+nhận lời mời
 -----------------------------------------------------------------------------------------------------------------------
 Duyệt lời mời		POST		http://localhost:5000/api/friend/accept			Chấp nhận lời mời
 1.email được gửi lời mời đăng nhập vào ->lưu token (thêm Bearer Token ở phần Authorization > Bearer Token)

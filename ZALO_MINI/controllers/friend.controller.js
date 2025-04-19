@@ -81,6 +81,32 @@ exports.removeFriend = async (req, res) => {
     res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
   }
 };
+// Lấy danh sách lời mời kết bạn đang chờ phản hồi
+exports.getReceivedRequests = async (req, res) => {
+  try {
+    const currentEmail = req.user.email;
+    const requests = await FriendModel.getRequests(currentEmail);
+
+    // Lấy thông tin người gửi
+    const enrichedRequests = await Promise.all(
+      requests.map(async (req) => {
+        const sender = await User.getUserByEmail(req.fromEmail);
+        return {
+          requestId: req.requestId,
+          fromEmail: req.fromEmail,
+          fromUsername: sender?.username || '',
+          fromAvatar: sender?.avatarUrl || '',
+          status: req.status,
+          createdAt: req.createdAt,
+        };
+      })
+    );
+
+    res.json({ message: 'Danh sách lời mời kết bạn nhận được', requests: enrichedRequests });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+};
 
 // Lấy danh sách bạn bè 
 exports.getFriendList = async (req, res) => {
