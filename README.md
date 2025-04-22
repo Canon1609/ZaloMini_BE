@@ -170,7 +170,39 @@ Xem danh sách bạn bè 	GET		http://localhost:5000/api/friend/list			Xem danh 
     ]
 }
 
+-=================================================================================================================
+tạo bảng (group) trên dynamoDB
+{
+  "groupId": "uuid",
+  "name": "Team UI/UX",
+  "ownerId": "user_id_of_creator", // ID của người tạo nhóm (trưởng nhóm)
+  "members": [
+    { "userId": "user_id_of_creator", "role": "admin" }, // Trưởng nhóm
+    { "userId": "user_id_1", "role": "co-admin" },       // Phó nhóm (được gán quyền)
+    { "userId": "user_id_2", "role": "member" }
+  ],
+  "createdAt": "ISOString"
+}
+          API QUẢN LÝ NHÓM
+ĐẦU TIỀN USER PHẢI ĐĂNG NHẬP VÀO HỆ THỐNG->
+1. Tạo nhóm
+POST http://localhost:5000/api/groups
+{
+    "name": "Nhóm Postman Test",
+    "initialMembersEmails": ["yowopi3931@linxues.com", "ldj05587@jioso.com"]
+}
 
+2.lấy tất cả các nhóm của user
+GET    http://localhost:5000/api/groups/my-groups
+
+3.Gán Quyền Quản Trị phó nhóm
+PUT	http://localhost:5000/api/groups/<groupId>/admins/<userIdToAssign>
+
+4.Xóa Thành Viên
+DELETE	http://localhost:5000/api/groups/<groupId>/members/<userIdToRemove>
+
+5.Giải Tán Nhóm chia hành lý
+DELETE	http://localhost:5000/api/groups/<groupId>
 
 
 

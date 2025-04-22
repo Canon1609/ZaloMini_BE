@@ -13,6 +13,7 @@ const Message = require('./models/message.model');
 const User = require('./models/user.model'); // Thêm import User
 const FriendModel = require('./models/friend.model');
 const friendRoutes = require('./routes/friend.routes');
+const groupRoutes = require('./routes/group.routes');
 
 // Cấu hình CORS chung cho cả Express và Socket.IO
 const corsOptions = {
@@ -50,6 +51,8 @@ app.use('/api/user', userRoutes);
 app.use("/api/chat", chatRoutes);
 //API cho friend
 app.use('/api/friend', friendRoutes);
+// API cho nhóm
+app.use('/api/groups', groupRoutes);
 app.set('views', './views');
 app.set('socketio', io);
 // Socket.IO cho chat thời gian thực
@@ -76,7 +79,7 @@ io.on('connection', (socket) => {
     return;
   }
 
-  // Gửi tin nhắn
+  // GỬI TIN NHẮN
   socket.on('sendMessage', async (data) => {
     const { senderId, receiverId, content, type, fileUrl } = data;
     // Kiểm tra dữ liệu đầu vào
@@ -105,20 +108,31 @@ io.on('connection', (socket) => {
         messageType = 'file';
       }
     }
-      // Lưu tin nhắn vào DynamoDB bằng Message.createMessage
-      const message = await Message.createMessage({
+    // tạo message 
+    const message = {
+      messageId: `${senderId}#${receiverId}#${Date.now()}`,
+      senderId,
+      receiverId,
+      content: content || null,
+      type: fileUrl ? messageType : type,
+      fileUrl: fileUrl ? fileUrl : null,
+      isRead: false,
+      conversationId: [senderId, receiverId].sort().join('#'),
+      timestamp: new Date().toISOString(),
+    };
+
+      // Gửi tin nhắn tới receiver
+      io.to(`user_${receiverId}`).emit(`receiveMessage_${message.receiverId}`, {
+        messageId: message.messageId,
         senderId,
         receiverId,
         content: content || null,
-        type : messageType,
+        type: messageType,
         fileUrl: fileUrl || null,
         isRead: false,
         conversationId: [senderId, receiverId].sort().join('#'),
-        timestamp: new Date().toISOString(),
+        timestamp: message.timestamp,
       });
-      console.log(`Gửi tin nhắn tới receiverId: ${receiverId}`);
-      // Gửi tin nhắn tới receiver qua room
-      io.to(receiverId).emit(`receiveMessage_${receiverId}`, message);
     } catch (error) {
       console.error('Lỗi lưu tin nhắn:', error);
       socket.emit('error', { message: 'Lỗi lưu tin nhắn, vui lòng thử lại' });

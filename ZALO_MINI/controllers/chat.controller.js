@@ -15,6 +15,7 @@ exports.getListConversationByUserId = async (req, res) => {
       res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
     }
   };
+  
 // Tạo tin nhắn mới
 exports.createMessage = async (req, res) => {
     try {
@@ -29,11 +30,9 @@ exports.createMessage = async (req, res) => {
       if (file) {
           const uploadResult = await uploadToS3(file);        
           fileUrl = uploadResult; // Lưu URL của file đã upload
-      }
-    
+      }   
       // Tạo conversationId bằng cách sắp xếp senderId và receiverId
       const conversationId = [senderId, receiverId].sort().join('#');
-      
       // lọc type nếu là file
       let messageType = type;
       if (fileUrl) {
@@ -51,6 +50,7 @@ exports.createMessage = async (req, res) => {
      
       // Tạo tin nhắn
       const message = {
+        messageId: `${senderId}#${receiverId}#${Date.now()}`,
         senderId,
         receiverId,
         content: content || null,
@@ -60,18 +60,11 @@ exports.createMessage = async (req, res) => {
         conversationId,
         timestamp: timestamp || new Date().toISOString(),
       };
-  
       // Lưu tin nhắn vào DynamoDB
       const createdMessage = await Message.createMessage(message);
-      console.log(createdMessage);
       if (!createdMessage) {
         return res.status(500).json({ message: 'Không thể tạo tin nhắn' });
       }
-  
-      // Phát sự kiện Socket.IO
-      const io = req.app.get('socketio');
-      io.to(receiverId).emit(`receiveMessage_${receiverId}`, message);
-      // io.to(senderId).emit(`receiveMessage_${senderId}`, message);
       res.status(201).json(message);
     } catch (err) {
       console.error('Lỗi khi tạo tin nhắn:', err);
@@ -83,10 +76,6 @@ exports.createMessage = async (req, res) => {
 exports.getMessagesByConversationId = async (req, res) => {
     const userId = req.params.userId; // userId là selectedUser.userId
     const currentUserId = req.user.userId; // Lấy currentUserId từ token
-  
-    console.log('currentUserId:', currentUserId);
-    console.log('userId:', userId);
-  
     try {
       // Tạo conversationId bằng cách sắp xếp userId và currentUserId
       const conversationId = [currentUserId, userId].sort().join('#');
@@ -108,7 +97,7 @@ exports.getMessagesByConversationId = async (req, res) => {
   
       // Sắp xếp tin nhắn theo thời gian (mới nhất cuối cùng)
       const sortedMessages = Items.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  
+
       res.status(200).json(sortedMessages);
     } catch (error) {
       console.error('Lỗi khi lấy danh sách tin nhắn:', error);
@@ -134,9 +123,7 @@ exports.markMessagesAsRead = async (req, res) => {
         ':userId': userId,
       },
     };
-
     const { Items } = await ddbDocClient.send(new QueryCommand(params));
-
     for (const item of Items) {
       const updateParams = {
         TableName: 'message',
@@ -156,5 +143,102 @@ exports.markMessagesAsRead = async (req, res) => {
   } catch (error) {
     console.error('Lỗi khi đánh dấu tin nhắn đã đọc:', error);
     res.status(500).json({ message: 'Lỗi server', error: error.message });
+  }
+};
+exports.deleteMessage = async (req, res) => {
+  try {
+    const { conversationId, timestamp } = req.body;
+    const userId = req.user.userId;
+
+    if (!conversationId || !timestamp) {
+      return res.status(400).json({ message: 'Thiếu conversationId hoặc timestamp' });
+    }
+
+    const messages = await Message.getMessagesByConversation(conversationId);
+    const message = messages.find((msg) => msg.timestamp === timestamp);
+    if (!message) {
+      return res.status(404).json({ message: 'Tin nhắn không tồn tại' });
+    }
+
+    if (message.senderId !== userId) {
+      return res.status(403).json({ message: 'Bạn không có quyền xóa tin nhắn này' });
+    }
+
+    await Message.deleteMessage(conversationId, timestamp);
+    res.status(200).json({ message: 'Xóa tin nhắn thành công' });
+  } catch (err) {
+    console.error('Delete message error:', err.stack);
+    res.status(500).json({ message: err.message || 'Lỗi máy chủ' });
+  }
+};
+
+exports.recallMessage = async (req, res) => {
+  try {
+    const { conversationId, timestamp } = req.body;
+    const userId = req.user.userId;
+
+    if (!conversationId || !timestamp) {
+      return res.status(400).json({ message: 'Thiếu conversationId hoặc timestamp' });
+    }
+
+    const messages = await Message.getMessagesByConversation(conversationId);
+    const message = messages.find((msg) => msg.timestamp === timestamp);
+    if (!message) {
+      return res.status(404).json({ message: 'Tin nhắn không tồn tại' });
+    }
+
+    if (message.senderId !== userId) {
+      return res.status(403).json({ message: 'Bạn không có quyền thu hồi tin nhắn này' });
+    }
+
+    if (message.isRecalled) {
+      return res.status(400).json({ message: 'Tin nhắn đã được thu hồi trước đó' });
+    }
+
+    const updatedMessage = await Message.recallMessage(conversationId, timestamp);
+    res.status(200).json({ message: 'Thu hồi tin nhắn thành công', data: updatedMessage });
+  } catch (err) {
+    console.error('Recall message error:', err.stack);
+    res.status(500).json({ message: err.message || 'Lỗi máy chủ' });
+  }
+};
+
+exports.forwardMessage = async (req, res) => {
+  try {
+    const { conversationId, timestamp, newReceiverId } = req.body;
+    const senderId = reqProfessor.user.userId;
+
+    if (!conversationId || !timestamp || !newReceiverId) {
+      return res.status(400).json({ message: 'Thiếu conversationId, timestamp hoặc newReceiverId' });
+    }
+
+    const messages = await Message.getMessagesByConversation(conversationId);
+    const message = messages.find((msg) => msg.timestamp === timestamp);
+    if (!message) {
+      return res.status(404).json({ message: 'Tin nhắn không tồn tại' });
+    }
+
+    const newReceiver = await User.getUserById(newReceiverId);
+    if (!newReceiver) {
+      return res.status(404).json({ message: 'Người nhận mới không tồn tại' });
+    }
+
+    const sortedIds = [senderId, newReceiverId].sort();
+    const newConversationId = `${sortedIds[0]}#${sortedIds[1]}`;
+
+    const forwardedMessage = await Message.createMessage({
+      conversationId: newConversationId,
+      senderId,
+      receiverId: newReceiverId,
+      content: message.content,
+      contentType: message.contentType,
+      fileUrl: message.fileUrl,
+      isRead: false, // Ensure forwarded message is marked as unread
+    });
+
+    res.status(201).json({ message: 'Chuyển tiếp tin nhắn thành công', data: forwardedMessage });
+  } catch (err) {
+    console.error('Forward message error:', err.stack);
+    res.status(500).json({ message: err.message || 'Lỗi máy chủ' });
   }
 };
