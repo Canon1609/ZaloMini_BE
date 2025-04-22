@@ -13,6 +13,7 @@ const Message = require('./models/message.model');
 const User = require('./models/user.model'); // Thêm import User
 const FriendModel = require('./models/friend.model');
 const friendRoutes = require('./routes/friend.routes');
+const groupRoutes = require('./routes/group.routes');
 
 // Cấu hình CORS chung cho cả Express và Socket.IO
 const corsOptions = {
@@ -50,6 +51,8 @@ app.use('/api/user', userRoutes);
 app.use("/api/chat", chatRoutes);
 //API cho friend
 app.use('/api/friend', friendRoutes);
+// API cho nhóm
+app.use('/api/groups', groupRoutes);
 app.set('views', './views');
 app.set('socketio', io);
 // Socket.IO cho chat thời gian thực
