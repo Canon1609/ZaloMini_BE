@@ -11,7 +11,7 @@ router.post('/',protect, upload.single('file'), chatController.createMessage);
 router.get('/messages/:userId', protect, chatController.getMessagesByConversationId);
 router.post('/mark-read/', protect, chatController.markMessagesAsRead);
 
-router.delete('/delete', protect, messageController.deleteMessage);
-router.post('/recall', protect, messageController.recallMessage);
-router.post('/forward', protect, messageController.forwardMessage);
+router.delete('/delete', protect, chatController.deleteMessage);
+router.post('/recall', protect, chatController.recallMessage);
+router.post('/forward', protect, chatController.forwardMessage);
 module.exports = router;
