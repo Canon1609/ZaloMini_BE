@@ -191,7 +191,11 @@ POST http://localhost:5000/api/groups
     "name": "Nhóm Postman Test",
     "initialMembersEmails": ["yowopi3931@linxues.com", "ldj05587@jioso.com"]
 }
-
+7. Thêm thành viên vào nhóm
+POST  http://localhost:5000/api/groups/<groupId>/members  (Thay <groupId> bằng ID của nhóm mà bạn muốn thêm thành viên vào)
+{
+    "email": "qas78755@jioso.com"   //email ng cần thêm
+}
 2.lấy tất cả các nhóm của user
 GET    http://localhost:5000/api/groups/my-groups
 
@@ -204,11 +208,104 @@ DELETE	http://localhost:5000/api/groups/<groupId>/members/<userIdToRemove>
 5.Giải Tán Nhóm chia hành lý
 DELETE	http://localhost:5000/api/groups/<groupId>
 
+6. Rời khỏi nhóm
+DELETE  http://localhost:5000/api/groups/<groupId>/leave (Thay <groupId> bằng ID của nhóm mà người dùng muốn rời)
 
 
 
 
+=======================================CHAT NHÓM==================================
+tạo bảng (groupMessage)
+{
+ "messageId": "184038ef-59bb-481c-80c5-cc0b4a22cd1e",
+ "content": null,
+ "fileUrl": "https://up-load-file-tranquocanh.s3.ap-southeast-2.amazonaws.com/avatars/1ac66d3c-7d64-42ed-ba34-9735b6920d53.jpg",
+ "groupId": "44d1c99b-d79e-442c-bfb9-73818f556977",
+ "isRecalled": false,
+ "senderId": "1b17c298-1033-4bb6-bc63-4cf69ec1cd46",
+ "timestamp": "2025-04-24T14:29:54.185Z",
+ "type": "image"
+}
 
+
+6. Test API Gửi Tin Nhắn Nhóm (POST /api/group-chat):
+●	Method: POST
+●	URL: http://localhost:5000/api/group-chat
+●	Headers:
+○	Authorization: Bearer <your_access_token>
+○	Content-Type: application/json (nếu gửi text) hoặc multipart/form-data (nếu gửi file)
+●	Body:
+○	Text message (raw, JSON):
+{
+    "groupId": "group_id_123",  // Thay bằng ID nhóm hợp lệ
+    "content": "Xin chào cả nhóm!",
+    "type": "text"
+}
+
+○	File message (form-data):
+●	•  groupId: groupID123
+●	•  type: file
+●	•  file: (chọn một file từ máy tính)
+
+●	Kiểm tra:
+○	Status code: 201 Created
+○	Response body chứa thông tin tin nhắn đã gửi.
+●	Lưu ý:
+○	Nếu bạn gửi file, hãy chắc chắn chọn đúng Content-Type là multipart/form-data và sử dụng key file cho trường chứa file.
+7. Test API Lấy Tin Nhắn Nhóm (GET /api/group-chat/:groupId):
+●	Method: GET
+●	URL: http://localhost:5000/api/group-chat/group_id_123 (Thay group_id_123 bằng ID nhóm)
+●	Headers:
+○	Authorization: Bearer <your_access_token>
+●	Kiểm tra:
+○	Status code: 200 OK
+○	Response body là một mảng các tin nhắn của nhóm.
+8. Test API Xóa Tin Nhắn Nhóm (DELETE /api/group-chat):
+●	Method: DELETE
+●	URL: http://localhost:5000/api/group-chat
+●	Headers:
+○	Authorization: Bearer <your_access_token>
+○	Content-Type: application/json
+●	Body (raw, JSON):
+{
+    "groupId": "group_id_123",  // Thay bằng ID nhóm
+    "timestamp": "2024-07-25T10:00:00.000Z"  // Thay bằng timestamp của tin nhắn cần xóa
+}
+
+●	Kiểm tra:
+○	Status code: 200 OK
+○	Response body chứa thông báo thành công.
+●	Quan trọng: Bạn cần truyền chính xác timestamp của tin nhắn bạn muốn xóa. Bạn có thể lấy timestamp này từ response của API lấy tin nhắn (GET /api/group-chat/:groupId). Ngoài ra, bạn chỉ có thể xóa tin nhắn do chính mình gửi.
+9. Test API Thu Hồi Tin Nhắn Nhóm (POST /api/group-chat/recall):
+●	Method: POST
+●	URL: http://localhost:5000/api/group-chat/recall
+●	Headers:
+* Authorization: Bearer <your_access_token>
+* Content-Type: application/json
+●	Body (raw, JSON):
+{
+●	    "messageId": "285af0b3-7493-43d7-ba9c-987383561e2a",
+●	    "senderId": "1b17c298-1033-4bb6-bc63-4cf69ec1cd46"
+●	}
+●	
+
+●	Kiểm tra:
+* Status code: 200 OK
+* Response body chứa thông tin tin nhắn đã được thu hồi.
+●	Lưu ý: Tương tự như xóa tin nhắn, bạn cần truyền chính xác timestamp và chỉ có thể thu hồi tin nhắn do chính mình gửi.
+10.Chuyển tiếp
+POST
+http://localhost:5000/api/group-chat/forward
+{
+    "groupId": "your_source_group_id",
+    "messageIdToForward": "your_message_id",
+    "targetGroupId": "your_target_group_id"
+}
+{
+    "groupId": "your_source_group_id",
+    "messageIdToForward": "your_message_id",
+    "targetUserId": "your_target_user_id"
+}
 
 
 
