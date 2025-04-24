@@ -136,6 +136,44 @@ const Group = {
         const group = await this.getGroupById(groupId);
         return group ? group.ownerId : null;
     },
+    async updateGroup(groupId, updates) {
+        const updateKeys = Object.keys(updates);
+        const updateValues = Object.values(updates);
+
+        let updateExpression = 'SET ';
+        const expressionAttributeValues = {};
+        const expressionAttributeNames = {};
+
+        updateKeys.forEach((key, index) => {
+            const placeholder = `:val${index}`;
+            updateExpression += `#${key} = ${placeholder}`; // Prefix the key with #
+            expressionAttributeValues[placeholder] = updateValues[index];
+            expressionAttributeNames[`#${key}`] = key;  // Store the key in ExpressionAttributeNames
+            if (index < updateKeys.length - 1) {
+                updateExpression += ', ';
+            }
+
+        });
+
+        const params = {
+            TableName: 'group', // Thay bằng tên bảng của bạn
+            Key: {
+                groupId: groupId,
+            },
+            UpdateExpression: updateExpression,
+            ExpressionAttributeValues: expressionAttributeValues,
+            ExpressionAttributeNames: expressionAttributeNames, // Thêm dòng này
+            ReturnValues: 'ALL_NEW',
+        };
+
+        try {
+            const result = await ddbDocClient.send(new UpdateCommand(params));
+            return result.Attributes;
+        } catch (error) {
+            console.error('Lỗi khi cập nhật nhóm:', error);
+            throw error;
+        }
+    },
 };
 
 module.exports = Group;

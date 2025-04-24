@@ -238,6 +238,9 @@ exports.assignAdmin = async (req, res) => {
     }
 };
 
+
+
+
 exports.leaveGroup = async (req, res) => {
     try {
         const { groupId } = req.params;
@@ -261,6 +264,7 @@ exports.leaveGroup = async (req, res) => {
             if (coAdmins.length > 0) {
                 // Chuyển quyền sở hữu cho phó nhóm đầu tiên
                 await Group.updateMemberRole(groupId, coAdmins[0].userId, 'admin');
+                await Group.updateGroup(groupId, { ownerId: coAdmins[0].userId }); // Cập nhật ownerId
                 // Xóa trưởng nhóm khỏi danh sách thành viên
                 await Group.removeMember(groupId, userId);
                 res.json({ message: 'Bạn đã rời nhóm. Quyền sở hữu đã được chuyển cho phó nhóm.' });
@@ -269,10 +273,11 @@ exports.leaveGroup = async (req, res) => {
                 // Nếu không có phó nhóm, tìm thành viên khác
                 const otherMembers = group.members.filter((m) => m.userId !== userId);
                 if (otherMembers.length > 0) {
-                  // Tìm một thành viên bất kỳ để chuyển quyền sở hữu
+                    // Tìm một thành viên bất kỳ để chuyển quyền sở hữu
                     const newOwner = otherMembers[0];
                     await Group.updateMemberRole(groupId, newOwner.userId, 'admin'); //chuyển quyền admin
-                    await Group.removeMember(groupId, userId);  // Xóa trưởng nhóm cũ
+                    await Group.updateGroup(groupId, { ownerId: newOwner.userId }); // Cập nhật ownerId
+                    await Group.removeMember(groupId, userId);  // Xóa trưởng nhóm cũ
                     res.json({ message: 'Bạn đã rời nhóm. Quyền sở hữu đã được chuyển cho một thành viên khác.' });
                     io.to(newOwner.userId).emit(`groupOwnerChanged_${newOwner.userId}`, { groupId });
                 } else {
@@ -295,3 +300,4 @@ exports.leaveGroup = async (req, res) => {
         res.status(500).json({ message: 'Đã có lỗi xảy ra khi rời nhóm.' });
     }
 };
+
