@@ -80,9 +80,14 @@ exports.addMember = async (req, res) => {
             return res.status(404).json({ message: 'Không tìm thấy nhóm.' });
         }
 
-        const requesterMember = group.members.find(member => member.userId === requesterId);
-        if (!requesterMember || (requesterMember.role !== 'admin' && requesterMember.role !== 'co-admin')) {
-            return res.status(403).json({ message: 'Bạn không có quyền thêm thành viên vào nhóm này.' });
+        const requesterMember = group.members.find((member) => member.userId === requesterId);
+        if (
+            !requesterMember ||
+            (requesterMember.role !== 'admin' && requesterMember.role !== 'co-admin')
+        ) {
+            return res
+                .status(403)
+                .json({ message: 'Bạn không có quyền thêm thành viên vào nhóm này.' });
         }
 
         const userToAdd = await User.getUserByEmail(email);
@@ -90,7 +95,7 @@ exports.addMember = async (req, res) => {
             return res.status(404).json({ message: 'Không tìm thấy người dùng với email này.' });
         }
 
-        if (group.members.some(member => member.userId === userToAdd.userId)) {
+        if (group.members.some((member) => member.userId === userToAdd.userId)) {
             return res.status(400).json({ message: 'Người dùng này đã là thành viên của nhóm.' });
         }
 
@@ -98,13 +103,19 @@ exports.addMember = async (req, res) => {
         res.json({ message: 'Đã thêm thành viên vào nhóm thành công.' });
 
         // Phát sự kiện Socket.IO thông báo thành viên mới
-        io.to(userToAdd.userId).emit(`addedToGroup_${userToAdd.userId}`, { groupId, groupName: group.name });
-        group.members.forEach(member => {
+        io.to(userToAdd.userId).emit(`addedToGroup_${userToAdd.userId}`, {
+            groupId,
+            groupName: group.name,
+        });
+        group.members.forEach((member) => {
             if (member.userId !== userToAdd.userId) {
-                io.to(member.userId).emit(`groupMemberUpdated_${groupId}`, { type: 'member_added', userId: userToAdd.userId, group });
+                io.to(member.userId).emit(`groupMemberUpdated_${groupId}`, {
+                    type: 'member_added',
+                    userId: userToAdd.userId,
+                    group,
+                });
             }
         });
-
     } catch (error) {
         console.error('Lỗi khi thêm thành viên:', error);
         res.status(500).json({ message: 'Đã có lỗi xảy ra khi thêm thành viên.' });
@@ -122,9 +133,14 @@ exports.removeMember = async (req, res) => {
             return res.status(404).json({ message: 'Không tìm thấy nhóm.' });
         }
 
-        const requesterMember = group.members.find(member => member.userId === requesterId);
-        if (!requesterMember || (requesterMember.role !== 'admin' && requesterMember.role !== 'co-admin')) {
-            return res.status(403).json({ message: 'Bạn không có quyền xóa thành viên khỏi nhóm này.' });
+        const requesterMember = group.members.find((member) => member.userId === requesterId);
+        if (
+            !requesterMember ||
+            (requesterMember.role !== 'admin' && requesterMember.role !== 'co-admin')
+        ) {
+            return res
+                .status(403)
+                .json({ message: 'Bạn không có quyền xóa thành viên khỏi nhóm này.' });
         }
 
         if (group.ownerId === userIdToRemove && requesterId !== userIdToRemove) {
@@ -135,13 +151,19 @@ exports.removeMember = async (req, res) => {
         res.json({ message: 'Đã xóa thành viên khỏi nhóm thành công.' });
 
         // Phát sự kiện Socket.IO thông báo thành viên bị xóa
-        io.to(userIdToRemove).emit(`removedFromGroup_${userIdToRemove}`, { groupId, groupName: group.name });
-        group.members.forEach(member => {
+        io.to(userIdToRemove).emit(`removedFromGroup_${userIdToRemove}`, {
+            groupId,
+            groupName: group.name,
+        });
+        group.members.forEach((member) => {
             if (member.userId !== userIdToRemove) {
-                io.to(member.userId).emit(`groupMemberUpdated_${groupId}`, { type: 'member_removed', userId: userIdToRemove, group });
+                io.to(member.userId).emit(`groupMemberUpdated_${groupId}`, {
+                    type: 'member_removed',
+                    userId: userIdToRemove,
+                    group,
+                });
             }
         });
-
     } catch (error) {
         console.error('Lỗi khi xóa thành viên:', error);
         res.status(500).json({ message: 'Đã có lỗi xảy ra khi xóa thành viên.' });
@@ -167,10 +189,12 @@ exports.disbandGroup = async (req, res) => {
         res.json({ message: 'Đã giải tán nhóm thành công.' });
 
         // Phát sự kiện Socket.IO thông báo nhóm bị giải tán
-        group.members.forEach(member => {
-            io.to(member.userId).emit(`groupDisbanded_${member.userId}`, { groupId, groupName: group.name });
+        group.members.forEach((member) => {
+            io.to(member.userId).emit(`groupDisbanded_${member.userId}`, {
+                groupId,
+                groupName: group.name,
+            });
         });
-
     } catch (error) {
         console.error('Lỗi khi giải tán nhóm:', error);
         res.status(500).json({ message: 'Đã có lỗi xảy ra khi giải tán nhóm.' });
@@ -211,5 +235,63 @@ exports.assignAdmin = async (req, res) => {
     } catch (error) {
         console.error('Lỗi khi gán quyền quản trị:', error);
         res.status(500).json({ message: 'Đã có lỗi xảy ra khi gán quyền quản trị.' });
+    }
+};
+
+exports.leaveGroup = async (req, res) => {
+    try {
+        const { groupId } = req.params;
+        const userId = req.user.userId;
+        const io = req.app.get('socketio');
+
+        const group = await Group.getGroupById(groupId);
+        if (!group) {
+            return res.status(404).json({ message: 'Không tìm thấy nhóm.' });
+        }
+
+        const member = group.members.find((m) => m.userId === userId);
+        if (!member) {
+            return res.status(400).json({ message: 'Bạn không phải là thành viên của nhóm này.' });
+        }
+
+        // Kiểm tra xem người rời nhóm có phải là trưởng nhóm không
+        if (group.ownerId === userId) {
+            // Tìm phó nhóm (co-admin)
+            const coAdmins = group.members.filter((m) => m.role === 'co-admin');
+            if (coAdmins.length > 0) {
+                // Chuyển quyền sở hữu cho phó nhóm đầu tiên
+                await Group.updateMemberRole(groupId, coAdmins[0].userId, 'admin');
+                // Xóa trưởng nhóm khỏi danh sách thành viên
+                await Group.removeMember(groupId, userId);
+                res.json({ message: 'Bạn đã rời nhóm. Quyền sở hữu đã được chuyển cho phó nhóm.' });
+                io.to(coAdmins[0].userId).emit(`groupOwnerChanged_${coAdmins[0].userId}`, { groupId });
+            } else {
+                // Nếu không có phó nhóm, tìm thành viên khác
+                const otherMembers = group.members.filter((m) => m.userId !== userId);
+                if (otherMembers.length > 0) {
+                  // Tìm một thành viên bất kỳ để chuyển quyền sở hữu
+                    const newOwner = otherMembers[0];
+                    await Group.updateMemberRole(groupId, newOwner.userId, 'admin'); //chuyển quyền admin
+                    await Group.removeMember(groupId, userId);  // Xóa trưởng nhóm cũ
+                    res.json({ message: 'Bạn đã rời nhóm. Quyền sở hữu đã được chuyển cho một thành viên khác.' });
+                    io.to(newOwner.userId).emit(`groupOwnerChanged_${newOwner.userId}`, { groupId });
+                } else {
+                    // Nếu không còn thành viên nào khác, giải tán nhóm
+                    await Group.disbandGroup(groupId);
+                    io.to(`groupDisbanded_${groupId}`).emit('groupDisbanded', { groupId });
+                    return res.json({
+                        message: 'Bạn là trưởng nhóm cuối cùng. Nhóm đã bị giải tán.',
+                    });
+                }
+            }
+        } else {
+            // Thành viên thường rời nhóm
+            await Group.removeMember(groupId, userId);
+            res.json({ message: 'Rời nhóm thành công.' });
+            io.to(`groupMemberLeft_${userId}`).emit('groupMemberLeft', { groupId });
+        }
+    } catch (error) {
+        console.error('Lỗi khi rời nhóm:', error);
+        res.status(500).json({ message: 'Đã có lỗi xảy ra khi rời nhóm.' });
     }
 };
