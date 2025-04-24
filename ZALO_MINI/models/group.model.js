@@ -55,19 +55,21 @@ const Group = {
     },
 
     // Các hàm khác cho quản lý nhóm (thêm thành viên, xóa thành viên, ...)
+    // Các hàm khác cho quản lý nhóm (thêm thành viên, xóa thành viên, ...)
     async addMember(groupId, userId, role = 'member') {
         const params = {
             TableName: TABLE_NAME,
             Key: { groupId },
-            UpdateExpression: 'SET #members = list_append(if_not_exists(#members, :empty_list), :member)',
+            UpdateExpression:
+                'SET #members = list_append(if_not_exists(#members, :empty_list), :member)',
             ExpressionAttributeNames: {
-                '#members': 'members'
+                '#members': 'members',
             },
             ExpressionAttributeValues: {
                 ':member': [{ userId, role }],
-                ':empty_list': []
+                ':empty_list': [],
             },
-            ReturnValues: 'UPDATED_NEW'
+            ReturnValues: 'UPDATED_NEW',
         };
         await ddbDocClient.send(new UpdateCommand(params));
     },
@@ -78,16 +80,16 @@ const Group = {
             return;
         }
 
-        const memberIndex = group.members.findIndex(member => member.userId === userId);
+        const memberIndex = group.members.findIndex((member) => member.userId === userId);
         if (memberIndex > -1) {
             const params = {
                 TableName: TABLE_NAME,
                 Key: { groupId },
                 UpdateExpression: `REMOVE #members[${memberIndex}]`,
                 ExpressionAttributeNames: {
-                    '#members': 'members'
+                    '#members': 'members',
                 },
-                ReturnValues: 'UPDATED_OLD'
+                ReturnValues: 'UPDATED_OLD',
             };
             await ddbDocClient.send(new UpdateCommand(params));
         }
@@ -96,7 +98,7 @@ const Group = {
     async disbandGroup(groupId) {
         const params = {
             TableName: TABLE_NAME,
-            Key: { groupId }
+            Key: { groupId },
         };
         await ddbDocClient.send(new DeleteCommand(params));
     },
@@ -107,15 +109,15 @@ const Group = {
             return;
         }
 
-        const memberIndex = group.members.findIndex(member => member.userId === userId);
+        const memberIndex = group.members.findIndex((member) => member.userId === userId);
         if (memberIndex > -1) {
             const updateExpression = `SET #members[${memberIndex}].#role = :role`;
             const expressionAttributeNames = {
                 '#members': 'members',
-                '#role': 'role'
+                '#role': 'role',
             };
             const expressionAttributeValues = {
-                ':role': role
+                ':role': role,
             };
 
             const params = {
@@ -124,11 +126,16 @@ const Group = {
                 UpdateExpression: updateExpression,
                 ExpressionAttributeNames: expressionAttributeNames,
                 ExpressionAttributeValues: expressionAttributeValues,
-                ReturnValues: 'UPDATED_NEW'
+                ReturnValues: 'UPDATED_NEW',
             };
             await ddbDocClient.send(new UpdateCommand(params));
         }
-    }
+    },
+
+    async getOwnerId(groupId) {
+        const group = await this.getGroupById(groupId);
+        return group ? group.ownerId : null;
+    },
 };
 
 module.exports = Group;
