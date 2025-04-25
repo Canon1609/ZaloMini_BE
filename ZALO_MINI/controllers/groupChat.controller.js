@@ -2,6 +2,7 @@
 const GroupMessage = require('../models/groupMessage.model');
 const UserMessage = require('../models/message.model');
 const User = require('../models/user.model');
+const Group = require('../models/group.model');
 const { uploadToS3 } = require('../utils/s3.util');
 
 exports.sendMessageToGroup = async (req, res) => {
