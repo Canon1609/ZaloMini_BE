@@ -16,6 +16,7 @@ const friendRoutes = require('./routes/friend.routes');
 const groupRoutes = require('./routes/group.routes');
 const groupChatRoutes = require('./routes/groupChat.routes');
 const GroupMessage = require('./models/groupMessage.model'); // Import model GroupMessage
+const Group = require('./models/group.model'); // Import model Group
 
 // Cấu hình CORS chung cho cả Express và Socket.IO
 const corsOptions = {
