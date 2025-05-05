@@ -45,7 +45,7 @@ const sendResetPasswordEmail = async (to, token) => {
 const sendResetPasswordEmailApp = async (to, token) => {
   // Mã hóa token để tránh lỗi ký tự đặc biệt
   const encodedToken = encodeURIComponent(token);
-  const link = `${process.env.EXPO_URL}/--/reset-password?token=${encodedToken}`;
+  const link = `${process.env.EXPO_URL}/--/reset-password-app?token=${encodedToken}`;
   console.log('Generated reset password link:', link);
   const options = {
     from: process.env.EMAIL_USER,
