@@ -34,6 +34,35 @@ exports.register = async (req, res) => {
   }
 };
 
+exports.registerApp = async (req, res) => {
+  try {
+    const { email, password, username } = req.body;
+
+    // Kiểm tra email đã tồn tại chưa
+    const existingUser = await User.getUserByEmail(email);
+    if (existingUser) return res.status(400).json({ message: 'Email đã tồn tại' });
+
+    // Hash mật khẩu
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Tạo user trong DB
+    const newUser = await User.createUser({
+      email,
+      passwordHash,
+      username,
+    });
+
+    // Gửi email xác minh
+    const token = signToken({ userId: newUser.userId, email });
+    await sendVerificationEmail(email, token);
+
+    res.status(201).json({ message: 'Đăng ký thành công. Vui lòng xác minh email.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+};
+
 // Xác minh email
 exports.verifyEmail = async (req, res) => {
   try {
