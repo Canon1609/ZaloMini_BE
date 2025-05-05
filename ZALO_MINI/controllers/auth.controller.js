@@ -88,7 +88,7 @@ exports.verifyEmailApp = async (req, res) => {
     await User.updateUser(user.userId, { isVerified: true });
     console.log('Updated user:', await User.getUserById(user.userId)); // Debug
 
-    const redirectUrl = `${process.env.EXPO_URL}/--/api/auth/verify-email?token=${token}`;
+    const redirectUrl = `${process.env.EXPO_URL}/--/api/auth/verify-email-app?token=${token}`;
     res.status(200).send(`
       <!DOCTYPE html>
       <html>
