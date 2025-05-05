@@ -29,6 +29,25 @@ const sendVerificationEmail = async (to, token , origin) => {
   await transporter.sendMail(options);
 };
 
+const sendVerificationEmailApp = async (to, token) => {
+  const html = await ejs.renderFile(
+    path.join(__dirname, '../views/verifyEmail.ejs'),
+    {
+      verifyLink: `${process.env.CLIENT_URL_APP}/api/auth/verify-email-app?token=${token}`,
+      token: token,
+    }
+  );
+
+  const options = {
+    from: process.env.EMAIL_USER,
+    to,
+    subject: 'Xác minh tài khoản ZALO_MINI',
+    html,
+  };
+
+  await transporter.sendMail(options);
+};
+
 const sendResetPasswordEmail = async (to, token) => {
   const link = `${process.env.CLIENT_URL}/api/auth/reset-password?token=${token}`;
 
@@ -81,4 +100,4 @@ const sendResetPasswordEmailApp = async (to, token) => {
   console.log('Email đặt lại mật khẩu đã gửi đến:', to, 'với link:', link);
 };
 
-module.exports = { sendVerificationEmail, sendResetPasswordEmail , sendResetPasswordEmailApp };
+module.exports = { sendVerificationEmail, sendResetPasswordEmail , sendResetPasswordEmailApp, sendVerificationEmailApp };
