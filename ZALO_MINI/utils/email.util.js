@@ -29,11 +29,11 @@ const sendVerificationEmail = async (to, token , origin) => {
   await transporter.sendMail(options);
 };
 
-const sendVerificationEmailApp = async (to, token) => {
+const sendVerificationEmailApp = async (to, token, origin) => {
   const html = await ejs.renderFile(
     path.join(__dirname, '../views/verifyEmail.ejs'),
     {
-      verifyLink: `${process.env.CLIENT_URL_APP}/api/auth/verify-email-app?token=${token}`,
+      verifyLink: `${origin}/api/auth/verify-email-app?token=${token}`,
       token: token,
     }
   );
