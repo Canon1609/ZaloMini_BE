@@ -1,273 +1,308 @@
-const {
-  PutCommand,
-  GetCommand,
-  UpdateCommand,
-  QueryCommand,ScanCommand
-} = require('@aws-sdk/lib-dynamodb');
+const e = require('express');
 const { ddbDocClient } = require('../config/aws.config');
-const User = require('./user.model');
-const TABLE_NAME = 'message';
-const { v4: uuidv4 } = require('uuid');
-const Message = {
-  // lấy tin nhắn theo senderId
-  async getListConversationByUserId(userId) {
-    try {
-      // Sử dụng ScanCommand để lấy tất cả tin nhắn có senderId hoặc receiverId là userId
-      const params = {
-        TableName: TABLE_NAME,
-        FilterExpression: 'senderId = :userId OR receiverId = :userId',
-        ExpressionAttributeValues: {
-          ':userId': userId,
-        },
-      };
-      //  Gọi DynamoDB để lấy tất cả tin nhắn
-      const { Items: allMessages } = await ddbDocClient.send(new ScanCommand(params));
-      // Kiểm tra xem có tin nhắn nào không 
-      if (!allMessages || allMessages.length === 0) {
-        return []; // Trả về mảng rỗng nếu không có tin nhắn nào
-      }
-  
-      // Nhóm tin nhắn theo conversationId
-      const conversationsMap = new Map();
-     //  Lặp qua tất cả tin nhắn và nhóm theo conversationId
-     //
-      for (const msg of allMessages) {
-        // Kiểm tra xem tin nhắn có liên quan đến người dùng hiện tại không
-        const otherUserId = msg.senderId === userId ? msg.receiverId : msg.senderId;
-        // Kiểm tra xem tin nhắn có phải là của người dùng hiện tại không
-        const conversationId = msg.conversationId;
-        // Kiểm tra xem cuộc trò chuyện đã tồn tại trong bản đồ chưa
-        if (!conversationsMap.has(conversationId)) {
-          // Nếu chưa, tạo một đối tượng cuộc trò chuyện mới
-          const otherUser = await User.getUserById(otherUserId);
-          conversationsMap.set(conversationId, {
-            userId: otherUserId,
-            username: otherUser.username,
-            avatarUrl: otherUser.avatarUrl,
-            lastMessage: msg.content,
-            time: msg.timestamp,
-            messages: [],
-          });
-        }
-  
-        const conversation = conversationsMap.get(conversationId);
-        conversation.messages.push(msg);
-  
-        // Cập nhật tin nhắn cuối cùng
-        if (new Date(msg.timestamp) > new Date(conversation.time)) {
-          conversation.lastMessage = msg.content;
-          conversation.time = msg.timestamp;
-        }
-      }
-  
-      // Tính số tin nhắn chưa đọc và định dạng dữ liệu trả về
-      const conversations = Array.from(conversationsMap.values()).map((conv) => {
-        const unread = conv.messages.filter(
-          (msg) => msg.receiverId === userId && !msg.isRead
-        ).length;
-  
-        return {
-          userId: conv.userId,
-          username: conv.username,
-          avatarUrl: conv.avatarUrl,
-          lastMessage: conv.lastMessage,
-          time: conv.time,
-          unread,
-        };
-      });
-  
-      // Sắp xếp theo thời gian (mới nhất trước)
-      conversations.sort((a, b) => new Date(b.time) - new Date(a.time));
-     return conversations
-    } catch (error) {
-      console.error('Lỗi khi lấy danh sách cuộc trò chuyện:', error);
-      res.status(500).json({ message: 'Lỗi server', error: error.message });
-    }
-  },
+const Message = require('../models/message.model');
+const uploadImageToS3 = require('../utils/imageS3.util');
+const { uploadToS3 } = require('../utils/s3.util');
+const { UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 
-  // lưu tin nhắn vào bảng message
-  async createMessage(message) {
+// Lấy danh sách cuộc trò chuyện của người dùng
+exports.getListConversationByUserId = async (req, res) => {
+  try {
+    const conversations = await Message.getListConversationByUserId(req.params.userId);
+    res.json(conversations);
+  } catch (err) {
+    console.error('Lỗi khi lấy danh sách cuộc trò chuyện:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+};
+
+// Tạo tin nhắn mới
+exports.createMessage = async (req, res) => {
+  try {
+    const { senderId, receiverId, content, type, isRead, timestamp } = req.body;
+    let file = req.file;
+    let fileUrl = null;
+
+    // Kiểm tra dữ liệu đầu vào
+    if (!content && !file) {
+      return res.status(400).json({ message: 'Nội dung hoặc file là bắt buộc' });
+    }
+
+    // Xử lý upload file lên S3 nếu có
+    if (file) {
+      const uploadResult = await uploadToS3(file);
+      fileUrl = uploadResult; // Lưu URL của file đã upload
+    }
+
+    // Tạo conversationId bằng cách sắp xếp senderId và receiverId
+    const conversationId = [senderId, receiverId].sort().join('#');
+
+    // Xác định type nếu là file
+    let messageType = type;
+    if (fileUrl) {
+      const extension = fileUrl.split('.').pop().toLowerCase();
+      const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
+      const videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm'];
+      if (imageExtensions.includes(extension)) {
+        messageType = 'image';
+      } else if (videoExtensions.includes(extension)) {
+        messageType = 'video';
+      } else {
+        messageType = 'file';
+      }
+    }
+
+    // Tạo tin nhắn
+    const message = {
+      messageId: `${senderId}#${receiverId}#${Date.now()}`,
+      senderId,
+      receiverId,
+      content: content || null,
+      type: fileUrl ? messageType : type,
+      fileUrl: fileUrl ? fileUrl : null,
+      isRead: isRead || false,
+      isRecalled: false, // Thêm thuộc tính isRecalled với giá trị mặc định là false
+      conversationId,
+      timestamp: timestamp || new Date().toISOString(),
+    };
+
+    // Lưu tin nhắn vào DynamoDB
+    const createdMessage = await Message.createMessage(message);
+    if (!createdMessage) {
+      return res.status(500).json({ message: 'Không thể tạo tin nhắn' });
+    }
+    res.status(201).json(message);
+  } catch (err) {
+    console.error('Lỗi khi tạo tin nhắn:', err);
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+};
+
+// Lấy danh sách tin nhắn giữa hai người dùng
+exports.getMessagesByConversationId = async (req, res) => {
+  const userId = req.params.userId; // userId là selectedUser.userId
+  const currentUserId = req.user.userId; // Lấy currentUserId từ token
+  try {
+    // Tạo conversationId bằng cách sắp xếp userId và currentUserId
+    const conversationId = [currentUserId, userId].sort().join('#');
+
+    // Truy vấn tin nhắn từ DynamoDB dựa trên conversationId
     const params = {
-      TableName: TABLE_NAME,
-      Item: {
-        messageId: uuidv4(),
-        conversationId: message.conversationId,
-        timestamp: message.timestamp,
-        senderId: message.senderId,
-        receiverId: message.receiverId,
-        content: message.content,
-        fileUrl: message.fileUrl,
-        type: message.type,
-        isRead: false,
+      TableName: 'message',
+      KeyConditionExpression: 'conversationId = :conversationId',
+      ExpressionAttributeValues: {
+        ':conversationId': conversationId,
       },
     };
-    await ddbDocClient.send(new PutCommand(params));
-    return message;
-  },
-  async deleteMessage(conversationId, timestamp) {
-    try {
-      const queryParams = {
-        TableName: TABLE_NAME,
-        KeyConditionExpression: 'conversationId = :cid AND #ts = :ts',
-        ExpressionAttributeNames: {
-          '#ts': 'timestamp',
-        },
-        ExpressionAttributeValues: {
-          ':cid': conversationId,
-          ':ts': timestamp,
-        },
-      };
 
-      const { Items } = await ddbDocClient.send(new QueryCommand(queryParams));
-      if (!Items || Items.length === 0) {
-        throw new Error('Tin nhắn không tồn tại');
-      }
+    const { Items } = await ddbDocClient.send(new QueryCommand(params));
 
-      const message = Items[0];
-
-      if (message.fileUrl) {
-        const fileKey = message.fileUrl.split('/').slice(-2).join('/');
-        const deleteParams = {
-          Bucket: process.env.AWS_S3_BUCKET_NAME,
-          Key: fileKey,
-        };
-        await s3Client.send(new DeleteObjectCommand(deleteParams));
-        console.log(`File deleted from S3: ${fileKey}`);
-      }
-
-      const deleteParams = {
-        TableName: TABLE_NAME,
-        Key: {
-          conversationId,
-          timestamp,
-        },
-      };
-
-      await ddbDocClient.send(new DeleteCommand(deleteParams));
-      console.log('Message deleted:', { conversationId, timestamp });
-      return { message: 'Xóa tin nhắn thành công' };
-    } catch (err) {
-      console.error('Delete message error:', err);
-      throw new Error(`Không thể xóa tin nhắn: ${err.message}`);
+    if (!Items) {
+      return res.status(200).json([]);
     }
-  },
 
-  async recallMessage(conversationId, timestamp) {
-    try {
-      const queryParams = {
-        TableName: TABLE_NAME,
-        KeyConditionExpression: 'conversationId = :cid AND #ts = :ts',
-        ExpressionAttributeNames: {
-          '#ts': 'timestamp',
-        },
-        ExpressionAttributeValues: {
-          ':cid': conversationId,
-          ':ts': timestamp,
-        },
-      };
+    // Sắp xếp tin nhắn theo thời gian (mới nhất cuối cùng)
+    const sortedMessages = Items.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-      const { Items } = await ddbDocClient.send(new QueryCommand(queryParams));
-      if (!Items || Items.length === 0) {
-        throw new Error('Tin nhắn không tồn tại');
-      }
+    // Đảm bảo mọi tin nhắn có thuộc tính isRecalled
+    const messagesWithRecalled = sortedMessages.map(msg => ({
+      ...msg,
+      isRecalled: msg.isRecalled ?? false, // Nếu không có isRecalled, mặc định là false
+    }));
 
-      const message = Items[0];
+    res.status(200).json(messagesWithRecalled);
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách tin nhắn:', error);
+    res.status(500).json({ message: 'Lỗi server', error: error.message });
+  }
+};
 
-      const messageTime = new Date(message.timestamp).getTime();
-      const currentTime = new Date().getTime();
-      const timeDiff = (currentTime - messageTime) / 1000;
-      if (timeDiff > 300) {
-        throw new Error('Không thể thu hồi tin nhắn sau 5 phút');
-      }
+// Đánh dấu tin nhắn là đã đọc
+exports.markMessagesAsRead = async (req, res) => {
+  const { conversationId, userId } = req.body;
 
-      if (message.fileUrl) {
-        const fileKey = message.fileUrl.split('/').slice(-2).join('/');
-        const deleteParams = {
-          Bucket: process.env.AWS_S3_BUCKET_NAME,
-          Key: fileKey,
-        };
-        await s3Client.send(new DeleteObjectCommand(deleteParams));
-        console.log(`File deleted from S3: ${fileKey}`);
-      }
+  if (!conversationId || !userId) {
+    return res.status(400).json({ message: 'Thiếu conversationId hoặc userId' });
+  }
 
+  try {
+    const params = {
+      TableName: 'message',
+      KeyConditionExpression: 'conversationId = :cid',
+      FilterExpression: 'isRead = :isRead AND receiverId = :userId AND isRecalled = :isRecalled',
+      ExpressionAttributeValues: {
+        ':cid': conversationId,
+        ':isRead': false,
+        ':userId': userId,
+        ':isRecalled': false, // Chỉ đánh dấu tin nhắn chưa bị thu hồi
+      },
+    };
+    const { Items } = await ddbDocClient.send(new QueryCommand(params));
+    for (const item of Items) {
       const updateParams = {
-        TableName: TABLE_NAME,
+        TableName: 'message',
         Key: {
-          conversationId,
-          timestamp,
+          conversationId: item.conversationId,
+          timestamp: item.timestamp,
         },
-        UpdateExpression: 'SET #isRecalled = :isRecalled, #content = :content, #fileUrl = :fileUrl, #contentType = :contentType',
-        ExpressionAttributeNames: {
-          '#isRecalled': 'isRecalled',
-          '#content': 'content',
-          '#fileUrl': 'fileUrl',
-          '#contentType': 'contentType',
-        },
+        UpdateExpression: 'set isRead = :isRead',
         ExpressionAttributeValues: {
-          ':isRecalled': true,
-          ':content': 'Tin nhắn đã được thu hồi',
-          ':fileUrl': null,
-          ':contentType': 'text',
-        },
-        ReturnValues: 'ALL_NEW',
-      };
-
-      const updatedMessage = await ddbDocClient.send(new UpdateCommand(updateParams));
-      console.log('Message recalled:', updatedMessage.Attributes);
-      return updatedMessage.Attributes;
-    } catch (err) {
-      console.error('Recall message error:', err);
-      throw new Error(`Không thể thu hồi tin nhắn: ${err.message}`);
-    }
-  },
-
-  async markMessagesAsRead(conversationId, userId) {
-    try {
-      // Fetch all messages in the conversation
-      const queryParams = {
-        TableName: TABLE_NAME,
-        KeyConditionExpression: 'conversationId = :cid',
-        ExpressionAttributeValues: {
-          ':cid': conversationId,
+          ':isRead': true,
         },
       };
-
-      const { Items } = await ddbDocClient.send(new QueryCommand(queryParams));
-      if (!Items || Items.length === 0) {
-        return { message: 'Không có tin nhắn để đánh dấu đã xem' };
-      }
-
-      // Update messages where the user is the receiver and isRead is false
-      const updates = Items.filter(
-        (msg) => msg.receiverId === userId && !msg.isRead && !msg.isRecalled
-      ).map(async (msg) => {
-        const updateParams = {
-          TableName: TABLE_NAME,
-          Key: {
-            conversationId,
-            timestamp: msg.timestamp,
-          },
-          UpdateExpression: 'SET #isRead = :isRead',
-          ExpressionAttributeNames: {
-            '#isRead': 'isRead',
-          },
-          ExpressionAttributeValues: {
-            ':isRead': true,
-          },
-          ReturnValues: 'ALL_NEW',
-        };
-
-        return ddbDocClient.send(new UpdateCommand(updateParams));
-      });
-
-      await Promise.all(updates);
-      console.log(`Marked messages as read for conversation ${conversationId}`);
-      return { message: 'Đánh dấu tin nhắn đã xem thành công' };
-    } catch (err) {
-      console.error('Mark messages as read error:', err);
-      throw new Error(`Không thể đánh dấu tin nhắn đã xem: ${err.message}`);
+      await ddbDocClient.send(new UpdateCommand(updateParams));
     }
-  },
-}
 
-module.exports = Message;
+    res.status(200).json({ message: 'Đã đánh dấu tin nhắn là đã đọc' });
+  } catch (error) {
+    console.error('Lỗi khi đánh dấu tin nhắn đã đọc:', error);
+    res.status(500).json({ message: 'Lỗi server', error: error.message });
+  }
+};
+
+// Xóa tin nhắn
+exports.deleteMessage = async (req, res) => {
+  try {
+    const { conversationId, timestamp } = req.body;
+    const userId = req.user.userId;
+
+    if (!conversationId || !timestamp) {
+      return res.status(400).json({ message: 'Thiếu conversationId hoặc timestamp' });
+    }
+
+    // Truy vấn tin nhắn từ DynamoDB dựa trên conversationId
+    const params = {
+      TableName: 'message',
+      KeyConditionExpression: 'conversationId = :conversationId AND #ts = :ts',
+      ExpressionAttributeNames: {
+        '#ts': 'timestamp',
+      },
+      ExpressionAttributeValues: {
+        ':conversationId': conversationId,
+        ':ts': timestamp,
+      },
+    };
+
+    const { Items } = await ddbDocClient.send(new QueryCommand(params));
+    if (!Items || Items.length === 0) {
+      return res.status(404).json({ message: 'Tin nhắn không tồn tại' });
+    }
+
+    const message = Items[0];
+
+    if (message.senderId !== userId) {
+      return res.status(403).json({ message: 'Bạn không có quyền xóa tin nhắn này' });
+    }
+
+    await Message.deleteMessage(conversationId, timestamp);
+    res.status(200).json({ message: 'Xóa tin nhắn thành công' });
+  } catch (err) {
+    console.error('Delete message error:', err.stack);
+    res.status(500).json({ message: err.message || 'Lỗi máy chủ' });
+  }
+};
+
+// Thu hồi tin nhắn
+exports.recallMessage = async (req, res) => {
+  try {
+    const { conversationId, timestamp } = req.body;
+    const userId = req.user.userId;
+
+    if (!conversationId || !timestamp) {
+      return res.status(400).json({ message: 'Thiếu conversationId hoặc timestamp' });
+    }
+
+    // Truy vấn tin nhắn từ DynamoDB dựa trên conversationId
+    const params = {
+      TableName: 'message',
+      KeyConditionExpression: 'conversationId = :conversationId AND #ts = :ts',
+      ExpressionAttributeNames: {
+        '#ts': 'timestamp',
+      },
+      ExpressionAttributeValues: {
+        ':conversationId': conversationId,
+        ':ts': timestamp,
+      },
+    };
+
+    const { Items } = await ddbDocClient.send(new QueryCommand(params));
+    if (!Items || Items.length === 0) {
+      return res.status(404).json({ message: 'Tin nhắn không tồn tại' });
+    }
+
+    const message = Items[0];
+
+    if (message.senderId !== userId) {
+      return res.status(403).json({ message: 'Bạn không có quyền thu hồi tin nhắn này' });
+    }
+
+    if (message.isRecalled) {
+      return res.status(400).json({ message: 'Tin nhắn đã được thu hồi trước đó' });
+    }
+
+    const updatedMessage = await Message.recallMessage(conversationId, timestamp);
+    console.log('Updated message:', updatedMessage);
+
+    res.status(200).json({ message: 'Thu hồi tin nhắn thành công', data: updatedMessage });
+  } catch (err) {
+    console.error('Recall message error:', err.stack);
+    res.status(500).json({ message: err.message || 'Lỗi máy chủ' });
+  }
+};
+
+// Chuyển tiếp tin nhắn
+exports.forwardMessage = async (req, res) => {
+  try {
+    const { conversationId, timestamp, newReceiverId } = req.body;
+    const senderId = req.user.userId;
+
+    if (!conversationId || !timestamp || !newReceiverId) {
+      return res.status(400).json({ message: 'Thiếu conversationId, timestamp hoặc newReceiverId' });
+    }
+
+    // Truy vấn tin nhắn từ DynamoDB dựa trên conversationId
+    const params = {
+      TableName: 'message',
+      KeyConditionExpression: 'conversationId = :conversationId AND #ts = :ts',
+      ExpressionAttributeNames: {
+        '#ts': 'timestamp',
+      },
+      ExpressionAttributeValues: {
+        ':conversationId': conversationId,
+        ':ts': timestamp,
+      },
+    };
+
+    const { Items } = await ddbDocClient.send(new QueryCommand(params));
+    if (!Items || Items.length === 0) {
+      return res.status(404).json({ message: 'Tin nhắn không tồn tại' });
+    }
+
+    const message = Items[0];
+
+    const newReceiver = await User.getUserById(newReceiverId);
+    if (!newReceiver) {
+      return res.status(404).json({ message: 'Người nhận mới không tồn tại' });
+    }
+
+    const sortedIds = [senderId, newReceiverId].sort();
+    const newConversationId = `${sortedIds[0]}#${sortedIds[1]}`;
+
+    const forwardedMessage = await Message.createMessage({
+      conversationId: newConversationId,
+      senderId,
+      receiverId: newReceiverId,
+      content: message.content,
+      type: message.type,
+      fileUrl: message.fileUrl,
+      isRead: false,
+      isRecalled: false, // Đảm bảo tin nhắn chuyển tiếp chưa bị thu hồi
+      timestamp: new Date().toISOString(),
+    });
+
+    res.status(201).json({ message: 'Chuyển tiếp tin nhắn thành công', data: forwardedMessage });
+  } catch (err) {
+    console.error('Forward message error:', err.stack);
+    res.status(500).json({ message: err.message || 'Lỗi máy chủ' });
+  }
+};
