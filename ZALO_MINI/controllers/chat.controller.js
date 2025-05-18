@@ -201,18 +201,18 @@ exports.deleteMessage = async (req, res) => {
     }
 };
 
-// Thu hồi tin nhắn
+// Thu hồi tin nhắn (sửa lại để chỉ cập nhật, không xóa)
 exports.recallMessage = async (req, res) => {
     try {
         const { conversationId, timestamp } = req.body;
-        const userId = req.user.userId;
+        const senderId = req.user.userId; // Lấy senderId từ token
 
         if (!conversationId || !timestamp) {
-            return res.status(400).json({ message: 'Thiếu conversationId hoặc timestamp' });
+            return res.status(400).json({ message: 'Vui lòng cung cấp conversationId và timestamp của tin nhắn cần thu hồi.' });
         }
 
-        // Truy vấn tin nhắn từ DynamoDB
-        const params = {
+        // Kiểm tra xem người gửi có quyền thu hồi tin nhắn không
+        const queryParams = {
             TableName: 'message',
             KeyConditionExpression: 'conversationId = :cid AND #ts = :ts',
             ExpressionAttributeNames: {
@@ -224,25 +224,32 @@ exports.recallMessage = async (req, res) => {
             },
         };
 
-        const { Items } = await ddbDocClient.send(new QueryCommand(params));
+        const { Items } = await ddbDocClient.send(new QueryCommand(queryParams));
         if (!Items || Items.length === 0) {
-            return res.status(404).json({ message: 'Tin nhắn không tồn tại' });
+            return res.status(404).json({ message: 'Không tìm thấy tin nhắn.' });
         }
 
         const message = Items[0];
-        if (message.senderId !== userId) {
-            return res.status(403).json({ message: 'Bạn không có quyền thu hồi tin nhắn này' });
+        if (message.senderId !== senderId) {
+            return res.status(403).json({ message: 'Bạn không có quyền thu hồi tin nhắn này.' });
         }
-
         if (message.isRecalled) {
-            return res.status(400).json({ message: 'Tin nhắn đã được thu hồi trước đó' });
+            return res.status(400).json({ message: 'Tin nhắn đã được thu hồi trước đó.' });
         }
 
-        const updatedMessage = await Message.recallMessage(conversationId, timestamp);
-        res.status(200).json({ message: 'Thu hồi tin nhắn thành công', data: updatedMessage });
-    } catch (err) {
-        console.error('Recall message error:', err.stack);
-        res.status(500).json({ message: err.message || 'Lỗi máy chủ' });
+        const recalledMessage = await Message.recallMessage(conversationId, timestamp, senderId);
+
+        // Phát sự kiện Socket.IO thông báo tin nhắn đã bị thu hồi
+        const io = req.app.get('socketio');
+        if (io && recalledMessage.conversationId) {
+            io.to(recalledMessage.receiverId).emit(`messageRecalled_${recalledMessage.receiverId}`, recalledMessage);
+            io.to(senderId).emit(`messageRecalled_${senderId}`, recalledMessage);
+        }
+
+        res.status(200).json({ message: 'Thu hồi tin nhắn thành công.', data: recalledMessage });
+    } catch (error) {
+        console.error('Lỗi khi thu hồi tin nhắn:', error);
+        res.status(500).json({ message: error.message || 'Đã có lỗi xảy ra khi thu hồi tin nhắn.' });
     }
 };
 
