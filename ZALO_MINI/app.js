@@ -104,18 +104,18 @@ io.on('connection', (socket) => {
     }
 
     let messageType = type;
-      if (fileUrl) {
-        const extension = fileUrl.split('.').pop().toLowerCase();
-        const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
-        const videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm'];
-        if (imageExtensions.includes(extension)) {
-          messageType = 'image';
-        } else if (videoExtensions.includes(extension)) {
-          messageType = 'video';
-        } else {
-          messageType = 'file';
-        }
+    if (fileUrl) {
+      const extension = fileUrl.split('.').pop().toLowerCase();
+      const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
+      const videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm'];
+      if (imageExtensions.includes(extension)) {
+        messageType = 'image';
+      } else if (videoExtensions.includes(extension)) {
+        messageType = 'video';
+      } else {
+        messageType = 'file';
       }
+    }
 
     // Tạo đối tượng tin nhắn
     const message = {
@@ -164,7 +164,12 @@ io.on('connection', (socket) => {
         socket.emit('error', { message: 'Không thể kết bạn với chính mình' });
         return;
       }
-
+      // Kiểm tra đã là bạn bè chưa
+      const friends = await FriendModel.getFriends(sender.email);
+      if (friends.some(friend => friend.email === receiver.email)) {
+        socket.emit('error', { message: 'Đã là bạn bè' });
+        return;
+      }
       const requests = await FriendModel.getRequests(receiver.email);
       if (requests.some((req) => req.fromEmail === sender.email)) {
         socket.emit('error', { message: 'Đã gửi lời mời rồi' });
@@ -588,7 +593,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  
+
 
   socket.on('removeMember', async (data) => {
     const { groupId, userId, memberIdToRemove } = data;
@@ -784,58 +789,185 @@ io.on('connection', (socket) => {
 
   // Trong io.on('connection', (socket) => { ... })
 
-  socket.on('recallMessage', async (data) => {
-    console.log('Received recallMessage:', data);
-    const { conversationId, timestamp, senderId } = data;
+  // Sự kiện thu hồi tin nhắn
+  // Trong io.on('connection', (socket) => { ... })
+
+  // socket.on('recallMessage', async (data) => {
+  //   console.log('Received recallMessage:', data);
+  //   const { conversationId, timestamp, senderId } = data;
+
+  //   if (!conversationId || !timestamp || !senderId) {
+  //     socket.emit('error', { message: 'Thiếu thông tin bắt buộc: conversationId, timestamp, senderId' });
+  //     console.error('Invalid recall data:', data);
+  //     return;
+  //   }
+
+  //   if (senderId !== userId) {
+  //     socket.emit('error', { message: 'Không có quyền thu hồi tin nhắn này' });
+  //     console.error('Sender ID mismatch:', { senderId, userId });
+  //     return;
+  //   }
+
+  //   try {
+  //     // Kiểm tra thời gian thu hồi (5 phút)
+  //     const messageTime = new Date(timestamp).getTime();
+  //     const currentTime = new Date().getTime();
+  //     if (currentTime - messageTime > 5 * 60 * 1000) {
+  //       socket.emit('error', { message: 'Không thể thu hồi tin nhắn sau 5 phút' });
+  //       console.error('Recall time limit exceeded:', { conversationId, timestamp });
+  //       return;
+  //     }
+
+  //     const updatedMessage = await Message.recallMessage(conversationId, timestamp);
+
+  //     if (!updatedMessage) {
+  //       socket.emit('error', { message: 'Không tìm thấy tin nhắn hoặc không thể thu hồi' });
+  //       console.error('Message not found or not recallable:', { conversationId, timestamp });
+  //       return;
+  //     }
+
+  //     if (updatedMessage.senderId !== senderId) {
+  //       socket.emit('error', { message: 'Chỉ người gửi mới có thể thu hồi tin nhắn' });
+  //       console.error('Unauthorized recall attempt:', { senderId, messageSenderId: updatedMessage.senderId });
+  //       return;
+  //     }
+
+  //     const eventData = {
+  //       conversationId,
+       
+  //       timestamp,
+  //       isRecalled: true,
+  //       content: updatedMessage.content || 'Tin nhắn đã được thu hồi',
+  //       fileUrl: null,
+  //       type: updatedMessage.type || 'text',
+  //     };
+
+  //     // Phát sự kiện tới người nhận
+  //     socket.to(updatedMessage.receiverId).emit(`messageRecalled_${updatedMessage.receiverId}`, eventData);
+  //     // Phát sự kiện tới người gửi
+  //     socket.emit(`messageRecalled_${senderId}`, eventData);
+  //     console.log(`Emitted messageRecalled to ${updatedMessage.receiverId} and ${senderId}`);
+  //   } catch (error) {
+  //     console.error('Lỗi thu hồi tin nhắn:', error);
+  //     socket.emit('error', { message: 'Lỗi thu hồi tin nhắn: ' + error.message });
+  //   }
+  // });
+socket.on('recallMessage', async (data) => {
+        console.log('Received recallMessage:', data);
+        const { conversationId, timestamp, senderId } = data;
+
+        // Kiểm tra dữ liệu đầu vào
+        if (!conversationId || !timestamp || !senderId) {
+            socket.emit('error', { message: 'Thiếu thông tin bắt buộc: conversationId, timestamp, senderId' });
+            console.error('Invalid recall data:', data);
+            return;
+        }
+
+        // Giả sử userId được lấy từ token trong quá trình xác thực socket
+        const userId = socket.userId; // Thay bằng cách lấy userId thực tế từ middleware xác thực
+        if (senderId !== userId) {
+            socket.emit('error', { message: 'Không có quyền thu hồi tin nhắn này' });
+            console.error('Sender ID mismatch:', { senderId, userId });
+            return;
+        }
+
+        try {
+            // Gọi hàm recallMessage từ message.model.js với senderId
+            const updatedMessage = await Message.recallMessage(conversationId, timestamp, senderId);
+
+            // Kiểm tra kết quả từ recallMessage
+            if (!updatedMessage || typeof updatedMessage === 'object' && updatedMessage.message === 'Tin nhắn này đã được thu hồi trước đó.') {
+                socket.emit('error', { message: 'Không tìm thấy tin nhắn hoặc tin nhắn đã được thu hồi trước đó' });
+                console.error('Message not recallable:', { conversationId, timestamp });
+                return;
+            }
+
+            // Chuẩn bị dữ liệu sự kiện
+            const eventData = {
+                conversationId: updatedMessage.conversationId,
+                timestamp: updatedMessage.timestamp,
+                isRecalled: updatedMessage.isRecalled,
+                content: updatedMessage.content || 'Tin nhắn đã được thu hồi.',
+                fileUrl: updatedMessage.fileUrl,
+                type: updatedMessage.type || 'text',
+            };
+
+            // Phát sự kiện tới cả người gửi và người nhận
+            socket.to(updatedMessage.receiverId).emit(`messageRecalled_${updatedMessage.receiverId}`, eventData);
+            socket.emit(`messageRecalled_${senderId}`, eventData);
+            console.log(`Emitted messageRecalled to ${updatedMessage.receiverId} and ${senderId}`);
+        } catch (error) {
+            console.error('Lỗi thu hồi tin nhắn:', error);
+            socket.emit('error', { message: 'Lỗi thu hồi tin nhắn: ' + error.message });
+        }
+    });
+
+
+
+  socket.on('forwardMessage', async (data) => {
+    console.log('Received forwardMessage:', data);
+    const { messageId, senderId, targetId, targetType, content, type, fileUrl, timestamp, isForwarded, originalSenderId } = data;
 
     // Kiểm tra dữ liệu đầu vào
-    if (!conversationId || !timestamp || !senderId) {
-      socket.emit('error', { message: 'Thiếu thông tin bắt buộc: conversationId, timestamp, senderId' });
-      console.error('Invalid recall data:', data);
+    if (!messageId || !senderId || !targetId || !targetType) {
+      console.error('Missing required fields:', { messageId, senderId, targetId, targetType });
+      socket.emit('error', { message: 'Thiếu thông tin bắt buộc để chuyển tiếp tin nhắn.' });
       return;
     }
 
-    // Giả sử userId được lấy từ token trong quá trình xác thực socket
-    const userId = socket.userId; // Thay bằng cách lấy userId thực tế từ middleware xác thực
+    // Kiểm tra senderId khớp với userId từ token
     if (senderId !== userId) {
-      socket.emit('error', { message: 'Không có quyền thu hồi tin nhắn này' });
       console.error('Sender ID mismatch:', { senderId, userId });
+      socket.emit('error', { message: 'Không có quyền chuyển tiếp tin nhắn.' });
       return;
     }
 
     try {
-      // Gọi hàm recallMessage từ message.model.js
-      const updatedMessage = await Message.recallMessage(conversationId, timestamp);
-
-      // Kiểm tra xem tin nhắn có tồn tại và có thể thu hồi
-      if (!updatedMessage) {
-        socket.emit('error', { message: 'Không tìm thấy tin nhắn hoặc không thể thu hồi' });
-        console.error('Message not found or not recallable:', { conversationId, timestamp });
-        return;
-      }
-
-      // Kiểm tra quyền và thời gian thu hồi (giả sử Message.recallMessage đã xử lý)
-      if (updatedMessage.senderId !== senderId) {
-        socket.emit('error', { message: 'Chỉ người gửi mới có thể thu hồi tin nhắn' });
-        console.error('Unauthorized recall attempt:', { senderId, messageSenderId: updatedMessage.senderId });
-        return;
-      }
-
-      // Phát sự kiện tới cả người gửi và người nhận
-      const eventData = {
-        conversationId,
-        timestamp,
-        isRecalled: true,
-        content: updatedMessage.content || 'Tin nhắn đã được thu hồi',
-        fileUrl: null,
-        type: updatedMessage.type || 'text',
+      const message = {
+        messageId,
+        senderId,
+        content: content || null,
+        type,
+        fileUrl: fileUrl || null,
+        timestamp: timestamp || new Date().toISOString(),
+        isForwarded: isForwarded || true,
+        originalSenderId: originalSenderId || senderId,
       };
-      socket.to(updatedMessage.receiverId).emit(`messageRecalled_${updatedMessage.receiverId}`, eventData);
-      socket.emit(`messageRecalled_${senderId}`, eventData);
-      console.log(`Emitted messageRecalled to ${updatedMessage.receiverId} and ${senderId}`);
+
+      if (targetType === 'group') {
+        const group = await Group.getGroupById(targetId);
+        if (!group || !group.members.some((member) => member.userId === senderId)) {
+          console.error('Not a group member:', { targetId, senderId });
+          socket.emit('error', { message: 'Bạn không phải thành viên của nhóm đích.' });
+          return;
+        }
+        message.groupId = targetId;
+        const savedMessage = await GroupMessage.createGroupMessage(message);
+        io.to(`group_${targetId}`).emit('receiveGroupMessage', savedMessage);
+      } else if (targetType === 'user') {
+        if (targetId === senderId) {
+          console.error('Cannot forward to self:', { targetId, senderId });
+          socket.emit('error', { message: 'Không thể chuyển tiếp tin nhắn cho chính mình.' });
+          return;
+        }
+        const targetUser = await User.getUserById(targetId);
+        if (!targetUser) {
+          console.error('Target user not found:', { targetId });
+          socket.emit('error', { message: 'Người nhận không tồn tại.' });
+          return;
+        }
+        const sortedIds = [senderId, targetId].sort();
+        message.conversationId = `${sortedIds[0]}#${sortedIds[1]}`;
+        message.receiverId = targetId;
+        const savedMessage = await Message.createMessage(message);
+        io.to(targetId).emit(`receiveMessage_${targetId}`, savedMessage);
+        io.to(senderId).emit(`receiveMessage_${senderId}`, savedMessage);
+      }
+
+      socket.emit('forwardMessageSuccess', { message: 'Tin nhắn đã được chuyển tiếp thành công.', data: message });
     } catch (error) {
-      console.error('Lỗi thu hồi tin nhắn:', error);
-      socket.emit('error', { message: 'Lỗi thu hồi tin nhắn: ' + error.message });
+      console.error('Forward message error:', error);
+      socket.emit('error', { message: 'Không thể chuyển tiếp tin nhắn: ' + error.message });
     }
   });
   socket.on('forwardGroupMessage', async (data) => {
@@ -907,6 +1039,7 @@ io.on('connection', (socket) => {
       socket.emit('error', { message: 'Không thể chuyển tiếp tin nhắn: ' + error.message });
     }
   });
+
   //---->
 
   //Gán phó nhóm và xóa

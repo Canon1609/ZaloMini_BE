@@ -147,9 +147,10 @@ const Message = {
         }
     },
 
-    // Thu hồi tin nhắn
-    async recallMessage(conversationId, timestamp) {
+    // Thu hồi tin nhắn (sửa lại để chỉ cập nhật, không xóa)
+    async recallMessage(conversationId, timestamp, senderId) {
         try {
+            // Lấy tin nhắn bằng conversationId và timestamp
             const queryParams = {
                 TableName: TABLE_NAME,
                 KeyConditionExpression: 'conversationId = :cid AND #ts = :ts',
@@ -164,56 +165,47 @@ const Message = {
 
             const { Items } = await ddbDocClient.send(new QueryCommand(queryParams));
             if (!Items || Items.length === 0) {
-                throw new Error('Tin nhắn không tồn tại');
+                throw new Error('Tin nhắn không tồn tại.');
             }
 
-            const message = Items[0];
+            const messageToRecall = Items[0];
+            if (messageToRecall.senderId !== senderId) {
+                throw new Error('Bạn không có quyền thu hồi tin nhắn này.');
+            }
+            if (messageToRecall.isRecalled) {
+                return { message: 'Tin nhắn này đã được thu hồi trước đó.' };
+            }
 
-            const messageTime = new Date(message.timestamp).getTime();
+            // Kiểm tra thời gian (5 phút)
+            const messageTime = new Date(messageToRecall.timestamp).getTime();
             const currentTime = new Date().getTime();
             const timeDiff = (currentTime - messageTime) / 1000;
             if (timeDiff > 300) {
                 throw new Error('Không thể thu hồi tin nhắn sau 5 phút');
             }
 
-            if (message.fileUrl) {
-                const fileKey = message.fileUrl.split('/').slice(-2).join('/');
-                const deleteParams = {
-                    Bucket: process.env.AWS_S3_BUCKET_NAME,
-                    Key: fileKey,
-                };
-                await s3Client.send(new DeleteObjectCommand(deleteParams));
-                console.log(`File deleted from S3: ${fileKey}`);
-            }
-
+            // Cập nhật trạng thái thu hồi (không xóa file S3)
             const updateParams = {
                 TableName: TABLE_NAME,
                 Key: {
                     conversationId,
                     timestamp,
                 },
-                UpdateExpression: 'SET #isRecalled = :isRecalled, #content = :content, #fileUrl = :fileUrl, #type = :type',
-                ExpressionAttributeNames: {
-                    '#isRecalled': 'isRecalled',
-                    '#content': 'content',
-                    '#fileUrl': 'fileUrl',
-                    '#type': 'type', // Sửa contentType thành type
-                },
+                UpdateExpression: 'SET isRecalled = :isRecalled, content = :content, fileUrl = :fileUrl',
                 ExpressionAttributeValues: {
                     ':isRecalled': true,
-                    ':content': 'Tin nhắn đã được thu hồi',
-                    ':fileUrl': null,
-                    ':type': 'text',
+                    ':content': 'Tin nhắn đã được thu hồi.',
+                    ':fileUrl': null, // Đặt fileUrl về null để đánh dấu thu hồi, nhưng không xóa file thực tế
                 },
                 ReturnValues: 'ALL_NEW',
             };
 
-            const updatedMessage = await ddbDocClient.send(new UpdateCommand(updateParams));
-            console.log('Message recalled:', updatedMessage.Attributes);
-            return updatedMessage.Attributes;
-        } catch (err) {
-            console.error('Recall message error:', err);
-            throw new Error(`Không thể thu hồi tin nhắn: ${err.message}`);
+            const result = await ddbDocClient.send(new UpdateCommand(updateParams));
+            console.log('Message recalled:', result.Attributes);
+            return result.Attributes;
+        } catch (error) {
+            console.error('Lỗi khi thu hồi tin nhắn:', error);
+            throw error;
         }
     },
 
