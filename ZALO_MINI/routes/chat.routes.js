@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const chatController = require('../controllers/message.controller');
+const chatController = require('../controllers/chat.controller');
 const { protect } = require('../middleware/auth.middleware');
 const upload = require('../middleware/upload.middleware');
 // phương thức GET để lấy danh sách cuộc trò chuyện theo userId

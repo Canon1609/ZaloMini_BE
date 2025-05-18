@@ -172,7 +172,6 @@ exports.deleteMessage = async (req, res) => {
   }
 };
 
-// Thu hồi tin nhắn
 exports.recallMessage = async (req, res) => {
   try {
     const { conversationId, timestamp } = req.body;
@@ -181,7 +180,7 @@ exports.recallMessage = async (req, res) => {
     if (!conversationId || !timestamp) {
       return res.status(400).json({ message: 'Thiếu conversationId hoặc timestamp' });
     }
-    // tìm tin nhắn trong danh sách tin nhắn của cuộc trò chuyện
+
     const messages = await Message.getMessagesByConversation(conversationId);
     const message = messages.find((msg) => msg.timestamp === timestamp);
     if (!message) {
@@ -197,8 +196,6 @@ exports.recallMessage = async (req, res) => {
     }
 
     const updatedMessage = await Message.recallMessage(conversationId, timestamp);
-    console.log('Updated message:', updatedMessage);
-    
     res.status(200).json({ message: 'Thu hồi tin nhắn thành công', data: updatedMessage });
   } catch (err) {
     console.error('Recall message error:', err.stack);
@@ -209,8 +206,8 @@ exports.recallMessage = async (req, res) => {
 exports.forwardMessage = async (req, res) => {
   try {
     const { conversationId, timestamp, newReceiverId } = req.body;
-    const senderId = req.user.userId;
-
+    // const senderId = reqProfessor.user.userId;
+    const senderId = req.user.userId;//Khôi SửaSửa
     if (!conversationId || !timestamp || !newReceiverId) {
       return res.status(400).json({ message: 'Thiếu conversationId, timestamp hoặc newReceiverId' });
     }
@@ -228,16 +225,15 @@ exports.forwardMessage = async (req, res) => {
 
     const sortedIds = [senderId, newReceiverId].sort();
     const newConversationId = `${sortedIds[0]}#${sortedIds[1]}`;
-    // sửa chổ này contentType thành type
+
     const forwardedMessage = await Message.createMessage({
       conversationId: newConversationId,
       senderId,
       receiverId: newReceiverId,
       content: message.content,
-      type: message.type,
+      contentType: message.contentType,
       fileUrl: message.fileUrl,
       isRead: false, // Ensure forwarded message is marked as unread
-      timestamp: new Date().toISOString(),
     });
 
     res.status(201).json({ message: 'Chuyển tiếp tin nhắn thành công', data: forwardedMessage });
