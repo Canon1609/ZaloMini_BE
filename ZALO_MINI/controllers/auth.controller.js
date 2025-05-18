@@ -37,7 +37,7 @@ exports.register = async (req, res) => {
 exports.registerApp = async (req, res) => {
   try {
     const { email, password, username } = req.body;
-    const origin = req.headers.origin || "http://192.168.1.140:5000"; // Lấy origin từ client, mặc định 3000 nếu không có
+    const origin = req.headers.origin || "http://192.168.31.188:5000"; // Lấy origin từ client, mặc định 3000 nếu không có
 
     // Kiểm tra email đã tồn tại chưa
     const existingUser = await User.getUserByEmail(email);
